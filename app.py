@@ -104,7 +104,81 @@ footer {
 h1,
 h2,
 h3 {
+    color: #172019 !important;
+}
+
+/* =========================================================
+   READABILITY
+   白背景では必ず濃い文字を使う
+   ========================================================= */
+
+.stApp,
+.stApp p,
+.stApp label,
+.stApp [data-testid="stMarkdownContainer"],
+.stApp [data-testid="stCaptionContainer"] {
     color: #172019;
+}
+
+/* タブ：未選択も白文字にしない */
+button[data-baseweb="tab"] {
+    color: #667069 !important;
+}
+
+button[data-baseweb="tab"] p,
+button[data-baseweb="tab"] span {
+    color: inherit !important;
+}
+
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #ff4b55 !important;
+    font-weight: 850 !important;
+}
+
+/* Metric：白背景に白い数値が出るのを防ぐ */
+div[data-testid="stMetric"] {
+    background: #ffffff !important;
+    border: 1px solid #e1e6e2 !important;
+    border-radius: 14px !important;
+    padding: .75rem .85rem !important;
+}
+
+div[data-testid="stMetric"] * {
+    color: #172019 !important;
+}
+
+div[data-testid="stMetricValue"] {
+    color: #123c2b !important;
+    font-weight: 900 !important;
+}
+
+/* Expanderや通常ラベル */
+div[data-testid="stExpander"] summary,
+div[data-testid="stExpander"] summary * {
+    color: #172019 !important;
+}
+
+/* 白背景のフォーム要素 */
+div[data-baseweb="input"] input {
+    color: #172019 !important;
+}
+
+/* ダーク背景のselect / multiselectは白文字で統一 */
+div[data-baseweb="select"] > div {
+    background: #25262e !important;
+    color: #ffffff !important;
+}
+
+div[data-baseweb="select"] > div * {
+    color: #ffffff !important;
+}
+
+/* ラジオ・チェックボックスのラベルは白背景なので濃色 */
+div[data-testid="stRadio"] label,
+div[data-testid="stRadio"] label *,
+div[data-testid="stCheckbox"] label,
+div[data-testid="stCheckbox"] label * {
+    color: #172019 !important;
 }
 
 
