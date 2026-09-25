@@ -563,6 +563,21 @@ div[role="radiogroup"] > label {
     }
 }
 
+
+/* ===== Compact stats tables ===== */
+.stats-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:.45rem 0 1rem;border:1px solid #dce3de;border-radius:14px;background:#fff}
+.stats-table{width:100%;border-collapse:collapse;min-width:760px;background:#fff;color:#172019;font-size:.78rem}
+.stats-table th{background:#eef3f0;color:#354039;font-size:.69rem;font-weight:900;white-space:nowrap;padding:.62rem .55rem;border-bottom:1px solid #dce3de;text-align:right}
+.stats-table td{padding:.62rem .55rem;border-bottom:1px solid #edf0ee;white-space:nowrap;text-align:right;color:#172019}
+.stats-table th:first-child,.stats-table td:first-child{position:sticky;left:0;z-index:2;text-align:left;background:#fff}
+.stats-table th:first-child{background:#eef3f0;z-index:3}
+.stats-table .player-cell{font-weight:900}.player-grade{display:block;margin-top:.08rem;color:#7a837d;font-size:.65rem;font-weight:700}
+.individual-stat-table{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1px solid #dce3de;border-radius:14px;overflow:hidden;margin-top:.55rem;color:#172019}
+.individual-stat-table td{width:25%;padding:.72rem .7rem;border-bottom:1px solid #edf0ee;color:#172019}
+.individual-stat-table tr:last-child td{border-bottom:none}.individual-stat-table .stat-label{color:#77817a;font-size:.7rem;font-weight:800}.individual-stat-table .stat-value{text-align:right;font-size:.9rem;font-weight:900}
+.key-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin:.55rem 0 .7rem}.key-stat{background:#fff;border:1px solid #dce3de;border-radius:12px;padding:.62rem .55rem}.key-stat-label{color:#788079;font-size:.62rem;font-weight:800}.key-stat-value{margin-top:.12rem;color:#123c2b;font-size:1.05rem;font-weight:900}
+@media(max-width:600px){.stats-table{font-size:.72rem}.stats-table th,.stats-table td{padding:.55rem .48rem}.individual-stat-table td{padding:.62rem .5rem}.key-stat-value{font-size:.95rem}}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -4037,175 +4052,92 @@ def history_page():
 # =========================================================
 
 def individual_stats():
-    all_players = (
-        get_players(False)
-    )
+    all_players = get_players(False)
 
     if not all_players:
-        st.info(
-            "選手が"
-            "登録されていません。"
-        )
+        st.info("選手が登録されていません。")
         return
 
-    selected_grades = (
-        grade_filter(
-            all_players,
-            "individual_grades",
-        )
-    )
-
-    players = (
-        filter_players_by_grade(
-            all_players,
-            selected_grades,
-        )
-    )
+    selected_grades = grade_filter(all_players, "individual_grades")
+    players = filter_players_by_grade(all_players, selected_grades)
 
     if not players:
-        st.info(
-            "選択した学年に"
-            "選手がいません。"
-        )
+        st.info("選択した学年に選手がいません。")
         return
 
-    games = game_filter_ui(
-        "individual"
-    )
+    games = game_filter_ui("individual")
 
     if not games:
-        st.info(
-            "条件に該当する試合が"
-            "ありません。"
-        )
+        st.info("条件に該当する試合がありません。")
         return
 
-    game_ids = [
-        g["id"]
-        for g in games
-    ]
+    game_ids = [g["id"] for g in games]
+
+    # まず全選手の打撃成績をコンパクトな一覧表で確認できる
+    section("打撃成績一覧")
+    render_batting_summary_table(
+        players,
+        get_batting_rows(game_ids),
+    )
+    st.caption("表は左右にスクロールできます。選手名は左側に固定されます。")
+
+    section("選手別の詳細")
 
     pid = st.selectbox(
         "選手",
-        [
-            p["id"]
-            for p in players
-        ],
+        [p["id"] for p in players],
         format_func=player_name,
         key="individual_player",
     )
 
-    selected_player = next(
-        (
-            p
-            for p in players
-            if p["id"] == pid
-        ),
-        None,
-    )
+    selected_player = next((p for p in players if p["id"] == pid), None)
 
-    if (
-        selected_player
-        and
-        selected_player.get(
-            "grade"
-        )
-    ):
-        st.caption(
-            f'学年：'
-            f'{selected_player["grade"]}'
-        )
+    if selected_player and selected_player.get("grade"):
+        st.caption(f'学年：{selected_player["grade"]}')
 
-    batting_tab, pitching_tab = (
-        st.tabs(
-            [
-                "打撃",
-                "投手",
-            ]
-        )
-    )
+    batting_tab, pitching_tab = st.tabs(["打撃", "投手"])
 
     with batting_tab:
-        stats = batting_stats(
-            get_batting_rows(
-                game_ids,
-                pid,
-            )
+        stats = batting_stats(get_batting_rows(game_ids, pid))
+
+        st.markdown(
+            '<div class="key-stats">'
+            f'<div class="key-stat"><div class="key-stat-label">打率</div><div class="key-stat-value">{format_avg(stats["AVG"])}</div></div>'
+            f'<div class="key-stat"><div class="key-stat-label">出塁率</div><div class="key-stat-value">{format_avg(stats["OBP"])}</div></div>'
+            f'<div class="key-stat"><div class="key-stat-label">OPS</div><div class="key-stat-value">{format_avg(stats["OPS"])}</div></div>'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
-        c1, c2, c3 = (
-            st.columns(3)
-        )
-
-        c1.metric(
-            "打率",
-            format_avg(
-                stats["AVG"]
-            ),
-        )
-
-        c2.metric(
-            "出塁率",
-            format_avg(
-                stats["OBP"]
-            ),
-        )
-
-        c3.metric(
-            "OPS",
-            format_avg(
-                stats["OPS"]
-            ),
-        )
-
-        st.write(
-            f'打席 **{stats["PA"]}**　'
-            f'打数 **{stats["AB"]}**　'
-            f'安打 **{stats["H"]}**'
-        )
-
-        st.write(
-            f'二塁打 **{stats["2B"]}**　'
-            f'三塁打 **{stats["3B"]}**　'
-            f'本塁打 **{stats["HR"]}**　'
-            f'打点 **{stats["RBI"]}**'
-        )
-
-        st.write(
-            f'四球 **{stats["BB"]}**　'
-            f'死球 **{stats["HBP"]}**　'
-            f'三振 **{stats["SO"]}**'
-        )
-
-        st.write(
-            f'犠打 **{stats["SH"]}**　'
-            f'犠飛 **{stats["SF"]}**　'
-            f'長打率 '
-            f'**{format_avg(stats["SLG"])}**'
-        )
+        compact_individual_table([
+            ("打席", stats["PA"], "打数", stats["AB"]),
+            ("安打", stats["H"], "打点", stats["RBI"]),
+            ("二塁打", stats["2B"], "三塁打", stats["3B"]),
+            ("本塁打", stats["HR"], "長打率", format_avg(stats["SLG"])),
+            ("四球", stats["BB"], "死球", stats["HBP"]),
+            ("三振", stats["SO"], "犠打", stats["SH"]),
+            ("犠飛", stats["SF"], "失策出塁", stats.get("E", 0)),
+        ])
 
     with pitching_tab:
         stats = pitching_summary(game_ids, pid)
+        era_text = "―" if stats["ERA"] is None else f'{stats["ERA"]:.2f}'
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("登板", stats["G"])
-        c2.metric("投球回", format_innings(stats["IP_OUTS"]))
-        c3.metric("防御率", "―" if stats["ERA"] is None else f'{stats["ERA"]:.2f}')
+        st.markdown(
+            '<div class="key-stats">'
+            f'<div class="key-stat"><div class="key-stat-label">防御率</div><div class="key-stat-value">{era_text}</div></div>'
+            f'<div class="key-stat"><div class="key-stat-label">登板</div><div class="key-stat-value">{stats["G"]}</div></div>'
+            f'<div class="key-stat"><div class="key-stat-label">投球回</div><div class="key-stat-value">{format_innings(stats["IP_OUTS"])}</div></div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-        st.write(
-            f'対戦打者 **{stats["BF"]}**　'
-            f'被安打 **{stats["H"]}**　'
-            f'被本塁打 **{stats["HR"]}**'
-        )
-        st.write(
-            f'奪三振 **{stats["SO"]}**　'
-            f'与四球 **{stats["BB"]}**　'
-            f'与死球 **{stats["HBP"]}**'
-        )
-        st.write(
-            f'失点 **{stats["R"]}**　'
-            f'自責点 **{stats["ER"]}**'
-        )
+        compact_individual_table([
+            ("対戦打者", stats["BF"], "被安打", stats["H"]),
+            ("奪三振", stats["SO"], "与四球", stats["BB"]),
+            ("与死球", stats["HBP"], "被本塁打", stats["HR"]),
+            ("失点", stats["R"], "自責点", stats["ER"]),
+        ])
 
 
 # =========================================================
