@@ -44,6 +44,11 @@ DEFAULTS = {
     "switch_open": False,
     "sub_open": False,
     "finish_open": False,
+    "tiebreak_open": False,
+    "edit_batting_id": None,
+    "delete_batting_id": None,
+    "edit_pitching_id": None,
+    "delete_pitching_id": None,
     "flash_message": None,
     "selected_history_game": None,
     "recent_teams": [],
@@ -536,6 +541,11 @@ def change_team():
     st.session_state.switch_open = False
     st.session_state.sub_open = False
     st.session_state.finish_open = False
+    st.session_state.tiebreak_open = False
+    st.session_state.edit_batting_id = None
+    st.session_state.delete_batting_id = None
+    st.session_state.edit_pitching_id = None
+    st.session_state.delete_pitching_id = None
 
     st.rerun()
 
@@ -2022,65 +2032,30 @@ def score_header(game):
 # =========================================================
 
 def batting_input(game):
-    lineup = (
-        get_lineup_players()
-    )
+    lineup = get_lineup_players()
 
     if not lineup:
-        st.info(
-            "オーダーが"
-            "登録されていません。"
-        )
+        st.info("オーダーが登録されていません。")
         return
 
-    batter_index = (
-        game.get(
-            "current_batter_index"
-        )
-        or 0
-    ) % len(lineup)
+    batter_index = (game.get("current_batter_index") or 0) % len(lineup)
+    batter = lineup[batter_index]
 
-    batter = lineup[
-        batter_index
-    ]
-
-    rows = get_batting_rows(
-        [game["id"]],
-        batter["id"],
-    )
-
-    stats = batting_stats(
-        rows
-    )
+    batter_rows = get_batting_rows([game["id"]], batter["id"])
+    stats = batting_stats(batter_rows)
 
     st.markdown(
         f'<div class="player-box">'
-        f'<div class="player-meta">'
-        f'{batter_index + 1}番'
-        f'</div>'
-        f'<div class="player-name">'
-        f'{esc(batter["name"])}'
-        f'</div>'
-        f'<div class="player-meta">'
-        f'今日 '
-        f'{stats["AB"]}打数 '
-        f'{stats["H"]}安打'
-        f'</div>'
+        f'<div class="player-meta">{batter_index + 1}番</div>'
+        f'<div class="player-name">{esc(batter["name"])}</div>'
+        f'<div class="player-meta">今日 {stats["AB"]}打数 {stats["H"]}安打</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
     result = st.radio(
         "打席結果",
-        [
-            "安打",
-            "アウト",
-            "三振",
-            "四球",
-            "死球",
-            "犠打",
-            "犠飛",
-        ],
+        ["安打", "アウト", "三振", "四球", "死球", "犠打", "犠飛"],
         horizontal=True,
         key="bat_result",
     )
@@ -2089,50 +2064,34 @@ def batting_input(game):
     batted_type = None
     hit_type = None
 
-    if result in [
-        "安打",
-        "アウト",
-    ]:
+    # 安打は「方向」と「何塁打か」だけを記録する
+    if result == "安打":
         field = st.radio(
             "方向",
-            [
-                "投",
-                "捕",
-                "一",
-                "二",
-                "三",
-                "遊",
-                "左",
-                "中",
-                "右",
-            ],
+            ["左", "左中間", "中", "右中間", "右"],
             horizontal=True,
-            key="bat_field",
+            key="bat_hit_field",
         )
-
-        batted_type = st.radio(
-            "打球",
-            [
-                "ゴロ",
-                "ライナー",
-                "フライ",
-                "オーバー",
-            ],
-            horizontal=True,
-            key="bat_type",
-        )
-
-    if result == "安打":
         hit_type = st.radio(
             "安打種別",
-            [
-                "単打",
-                "二塁打",
-                "三塁打",
-                "本塁打",
-            ],
+            ["単打", "二塁打", "三塁打", "本塁打"],
             horizontal=True,
             key="hit_type",
+        )
+
+    # アウトだけは従来どおり守備位置・打球種類を残す
+    elif result == "アウト":
+        field = st.radio(
+            "方向",
+            ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"],
+            horizontal=True,
+            key="bat_out_field",
+        )
+        batted_type = st.radio(
+            "打球",
+            ["ゴロ", "ライナー", "フライ", "オーバー"],
+            horizontal=True,
+            key="bat_type",
         )
 
     if st.button(
@@ -2141,86 +2100,175 @@ def batting_input(game):
         use_container_width=True,
     ):
         (
-            supabase.table(
-                "batting"
-            )
-            .insert(
-                {
-                    "game_id":
-                        game["id"],
-                    "player_id":
-                        batter["id"],
-                    "inning":
-                        game[
-                            "current_inning"
-                        ],
-                    "result":
-                        result,
-                    "field":
-                        field,
-                    "batted_type":
-                        batted_type,
-                    "hit_type":
-                        hit_type,
-                }
-            )
+            supabase.table("batting")
+            .insert({
+                "game_id": game["id"],
+                "player_id": batter["id"],
+                "inning": game["current_inning"],
+                "result": result,
+                "field": field,
+                "batted_type": batted_type,
+                "hit_type": hit_type,
+            })
             .execute()
         )
 
-        update_game(
-            {
-                "current_batter_index":
-                    (
-                        batter_index
-                        + 1
-                    )
-                    % len(lineup)
-            }
-        )
-
-        flash(
-            f'{batter["name"]}：'
-            f'{result} を登録'
-        )
-
+        update_game({
+            "current_batter_index": (batter_index + 1) % len(lineup)
+        })
+        flash(f'{batter["name"]}：{result} を登録')
         st.rerun()
 
-    if rows:
+    # -------------------------
+    # この回の攻撃記録
+    # -------------------------
+    inning_rows = [
+        r for r in get_batting_rows([game["id"]])
+        if int(r.get("inning") or 0) == int(game["current_inning"])
+    ]
+
+    section(f'{game["current_inning"]}回｜攻撃記録')
+
+    if not inning_rows:
+        st.caption("この回の打席記録はまだありません。")
+        return
+
+    pmap = get_player_map()
+
+    for i, row in enumerate(inning_rows, start=1):
+        player = pmap.get(row.get("player_id"), {})
+        name = player.get("name", "選手")
+        slot = next(
+            (p.get("slot") for p in lineup if p.get("id") == row.get("player_id")),
+            None,
+        )
+        result_text = row.get("result") or ""
+        if result_text == "安打":
+            direction = row.get("field") or ""
+            hit = row.get("hit_type") or "安打"
+            result_text = f"{direction} {hit}".strip()
+        elif result_text == "アウト":
+            parts = [row.get("field"), row.get("batted_type"), "アウト"]
+            result_text = " ".join(str(x) for x in parts if x)
+
+        prefix = f"{slot}番" if slot else f"{i}人目"
         if st.button(
-            "↶ 直前の打席を取り消す",
+            f"{prefix}  {name}　{result_text}　›",
+            key=f'open_bat_{row["id"]}',
             use_container_width=True,
         ):
-            last = rows[-1]
-
-            (
-                supabase.table(
-                    "batting"
-                )
-                .delete()
-                .eq(
-                    "id",
-                    last["id"],
-                )
-                .execute()
-            )
-
-            update_game(
-                {
-                    "current_batter_index":
-                        (
-                            batter_index
-                            - 1
-                        )
-                        % len(lineup)
-                }
-            )
-
-            flash(
-                "直前の打席を"
-                "取り消しました"
-            )
-
+            st.session_state.edit_batting_id = row["id"]
+            st.session_state.delete_batting_id = None
             st.rerun()
+
+        if st.session_state.get("edit_batting_id") == row["id"]:
+            st.caption("この打席を編集または削除できます。")
+
+            edit_result_options = ["安打", "アウト", "三振", "四球", "死球", "犠打", "犠飛"]
+            old_result = row.get("result") if row.get("result") in edit_result_options else "アウト"
+            edit_result = st.selectbox(
+                "打席結果",
+                edit_result_options,
+                index=edit_result_options.index(old_result),
+                key=f'edit_bat_result_{row["id"]}',
+            )
+
+            edit_field = None
+            edit_batted_type = None
+            edit_hit_type = None
+
+            if edit_result == "安打":
+                dirs = ["左", "左中間", "中", "右中間", "右"]
+                old_field = row.get("field") if row.get("field") in dirs else "中"
+                edit_field = st.selectbox(
+                    "方向", dirs, index=dirs.index(old_field),
+                    key=f'edit_bat_field_{row["id"]}',
+                )
+                hits = ["単打", "二塁打", "三塁打", "本塁打"]
+                old_hit = row.get("hit_type") if row.get("hit_type") in hits else "単打"
+                edit_hit_type = st.selectbox(
+                    "安打種別", hits, index=hits.index(old_hit),
+                    key=f'edit_hit_type_{row["id"]}',
+                )
+            elif edit_result == "アウト":
+                fields = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                old_field = row.get("field") if row.get("field") in fields else "遊"
+                edit_field = st.selectbox(
+                    "方向", fields, index=fields.index(old_field),
+                    key=f'edit_out_field_{row["id"]}',
+                )
+                types = ["ゴロ", "ライナー", "フライ", "オーバー"]
+                old_type = row.get("batted_type") if row.get("batted_type") in types else "ゴロ"
+                edit_batted_type = st.selectbox(
+                    "打球", types, index=types.index(old_type),
+                    key=f'edit_bat_type_{row["id"]}',
+                )
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button(
+                    "変更を保存",
+                    type="primary",
+                    key=f'save_bat_{row["id"]}',
+                    use_container_width=True,
+                ):
+                    (
+                        supabase.table("batting")
+                        .update({
+                            "result": edit_result,
+                            "field": edit_field,
+                            "batted_type": edit_batted_type,
+                            "hit_type": edit_hit_type,
+                        })
+                        .eq("id", row["id"])
+                        .execute()
+                    )
+                    st.session_state.edit_batting_id = None
+                    flash("打席記録を変更しました")
+                    st.rerun()
+
+            with c2:
+                if st.button(
+                    "削除",
+                    key=f'ask_delete_bat_{row["id"]}',
+                    use_container_width=True,
+                ):
+                    st.session_state.delete_batting_id = row["id"]
+                    st.rerun()
+
+            if st.session_state.get("delete_batting_id") == row["id"]:
+                st.warning("この打席記録を削除しますか？")
+                d1, d2 = st.columns(2)
+                with d1:
+                    if st.button(
+                        "削除する",
+                        key=f'delete_bat_{row["id"]}',
+                        use_container_width=True,
+                    ):
+                        (
+                            supabase.table("batting")
+                            .delete()
+                            .eq("id", row["id"])
+                            .execute()
+                        )
+                        # 打席が1つ減るので次打者を1つ戻す
+                        latest_game = get_game()
+                        latest_index = (latest_game.get("current_batter_index") or 0) % len(lineup)
+                        update_game({
+                            "current_batter_index": (latest_index - 1) % len(lineup)
+                        })
+                        st.session_state.edit_batting_id = None
+                        st.session_state.delete_batting_id = None
+                        flash("打席記録を削除しました")
+                        st.rerun()
+                with d2:
+                    if st.button(
+                        "キャンセル",
+                        key=f'cancel_delete_bat_{row["id"]}',
+                        use_container_width=True,
+                    ):
+                        st.session_state.delete_batting_id = None
+                        st.rerun()
 
 
 # =========================================================
@@ -2229,76 +2277,32 @@ def batting_input(game):
 
 def pitching_input(game):
     players = get_players()
+    current_pid = game.get("current_pitcher_id")
 
-    current_pid = (
-        game.get(
-            "current_pitcher_id"
-        )
-    )
-
-    pitcher = next(
-        (
-            p
-            for p in players
-            if p["id"]
-            == current_pid
-        ),
-        None,
-    )
-
-    if (
-        pitcher is None
-        and players
-    ):
+    pitcher = next((p for p in players if p["id"] == current_pid), None)
+    if pitcher is None and players:
         pitcher = players[0]
 
     if not pitcher:
-        st.info(
-            "投手が"
-            "登録されていません。"
-        )
+        st.info("投手が登録されていません。")
         return
 
-    rows = get_pitching_rows(
-        [game["id"]],
-        pitcher["id"],
-    )
-
-    stats = pitching_stats(
-        rows
-    )
+    pitcher_rows = get_pitching_rows([game["id"]], pitcher["id"])
+    stats = pitching_stats(pitcher_rows)
 
     st.markdown(
         f'<div class="player-box">'
-        f'<div class="player-meta">'
-        f'PITCHER'
-        f'</div>'
-        f'<div class="player-name">'
-        f'{esc(pitcher["name"])}'
-        f'</div>'
-        f'<div class="player-meta">'
-        f'H {stats["H"]}　'
-        f'K {stats["SO"]}　'
-        f'BB {stats["BB"]}　'
-        f'R {stats["R"]}'
-        f'</div>'
+        f'<div class="player-meta">PITCHER</div>'
+        f'<div class="player-name">{esc(pitcher["name"])}</div>'
+        f'<div class="player-meta">H {stats["H"]}　K {stats["SO"]}　BB {stats["BB"]}　R {stats["R"]}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
+    result_options = ["アウト", "三振", "安打", "二塁打", "三塁打", "本塁打", "四球", "死球", "失策"]
     result = st.radio(
         "打者結果",
-        [
-            "アウト",
-            "三振",
-            "安打",
-            "二塁打",
-            "三塁打",
-            "本塁打",
-            "四球",
-            "死球",
-            "失策",
-        ],
+        result_options,
         horizontal=True,
         key="pitch_result",
     )
@@ -2309,67 +2313,175 @@ def pitching_input(game):
         max_value=20,
         value=0,
         step=1,
+        key="pitch_runs",
     )
 
-    if st.button(
-        "結果を登録",
-        type="primary",
-        use_container_width=True,
-    ):
+    if st.button("結果を登録", type="primary", use_container_width=True):
         (
-            supabase.table(
-                "pitching"
-            )
-            .insert(
-                {
-                    "game_id":
-                        game["id"],
-                    "pitcher_id":
-                        pitcher["id"],
-                    "inning":
-                        game[
-                            "current_inning"
-                        ],
-                    "result":
-                        result,
-                    "runs":
-                        int(runs),
-                }
-            )
+            supabase.table("pitching")
+            .insert({
+                "game_id": game["id"],
+                "pitcher_id": pitcher["id"],
+                "inning": game["current_inning"],
+                "result": result,
+                "runs": int(runs),
+            })
             .execute()
         )
-
-        flash(
-            f"{result} を"
-            f"登録しました"
-        )
-
+        flash(f"{result} を登録しました")
         st.rerun()
 
-    if rows:
+    # -------------------------
+    # この回の守備記録
+    # -------------------------
+    inning_rows = [
+        r for r in get_pitching_rows([game["id"]])
+        if int(r.get("inning") or 0) == int(game["current_inning"])
+    ]
+
+    section(f'{game["current_inning"]}回｜守備記録')
+
+    if not inning_rows:
+        st.caption("この回の守備記録はまだありません。")
+        return
+
+    for i, row in enumerate(inning_rows, start=1):
+        label = f'{i}人目　{row.get("result") or ""}'
+        if int(row.get("runs") or 0) > 0:
+            label += f'　{int(row.get("runs") or 0)}失点'
+
         if st.button(
-            "↶ 直前の投球結果を取り消す",
+            f"{label}　›",
+            key=f'open_pitch_{row["id"]}',
             use_container_width=True,
         ):
-            last = rows[-1]
+            st.session_state.edit_pitching_id = row["id"]
+            st.session_state.delete_pitching_id = None
+            st.rerun()
 
-            (
-                supabase.table(
-                    "pitching"
-                )
-                .delete()
-                .eq(
-                    "id",
-                    last["id"],
-                )
-                .execute()
+        if st.session_state.get("edit_pitching_id") == row["id"]:
+            st.caption("この守備記録を編集または削除できます。")
+            old_result = row.get("result") if row.get("result") in result_options else "アウト"
+            edit_result = st.selectbox(
+                "打者結果",
+                result_options,
+                index=result_options.index(old_result),
+                key=f'edit_pitch_result_{row["id"]}',
+            )
+            edit_runs = st.number_input(
+                "このプレーで入った得点",
+                min_value=0,
+                max_value=20,
+                value=int(row.get("runs") or 0),
+                step=1,
+                key=f'edit_pitch_runs_{row["id"]}',
             )
 
-            flash(
-                "直前の投球結果を"
-                "取り消しました"
-            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button(
+                    "変更を保存",
+                    type="primary",
+                    key=f'save_pitch_{row["id"]}',
+                    use_container_width=True,
+                ):
+                    (
+                        supabase.table("pitching")
+                        .update({"result": edit_result, "runs": int(edit_runs)})
+                        .eq("id", row["id"])
+                        .execute()
+                    )
+                    st.session_state.edit_pitching_id = None
+                    flash("守備記録を変更しました")
+                    st.rerun()
 
+            with c2:
+                if st.button(
+                    "削除",
+                    key=f'ask_delete_pitch_{row["id"]}',
+                    use_container_width=True,
+                ):
+                    st.session_state.delete_pitching_id = row["id"]
+                    st.rerun()
+
+            if st.session_state.get("delete_pitching_id") == row["id"]:
+                st.warning("この守備記録を削除しますか？")
+                d1, d2 = st.columns(2)
+                with d1:
+                    if st.button(
+                        "削除する",
+                        key=f'delete_pitch_{row["id"]}',
+                        use_container_width=True,
+                    ):
+                        (
+                            supabase.table("pitching")
+                            .delete()
+                            .eq("id", row["id"])
+                            .execute()
+                        )
+                        st.session_state.edit_pitching_id = None
+                        st.session_state.delete_pitching_id = None
+                        flash("守備記録を削除しました")
+                        st.rerun()
+                with d2:
+                    if st.button(
+                        "キャンセル",
+                        key=f'cancel_delete_pitch_{row["id"]}',
+                        use_container_width=True,
+                    ):
+                        st.session_state.delete_pitching_id = None
+                        st.rerun()
+
+
+# =========================================================
+# TIEBREAK
+# =========================================================
+
+def tiebreak_panel(game):
+    # タイブレークでは、その回の先頭打者を手動で指定できる。
+    # DBの追加カラムは不要で、games.current_batter_index を更新する。
+    lineup = get_lineup_players()
+    if not lineup:
+        return
+
+    if st.button(
+        "タイブレーク設定",
+        use_container_width=True,
+    ):
+        st.session_state.tiebreak_open = not st.session_state.tiebreak_open
+
+    if not st.session_state.tiebreak_open:
+        return
+
+    st.info("タイブレークで、この回の先頭打者を選択してください。")
+    indices = list(range(len(lineup)))
+    current_index = (game.get("current_batter_index") or 0) % len(lineup)
+    selected_index = st.selectbox(
+        "この回の先頭打者",
+        indices,
+        index=current_index,
+        format_func=lambda i: f'{i + 1}番　{lineup[i]["name"]}',
+        key=f'tiebreak_batter_{game["id"]}_{game["current_inning"]}',
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button(
+            "この打者から開始",
+            type="primary",
+            use_container_width=True,
+        ):
+            update_game({"current_batter_index": int(selected_index)})
+            st.session_state.tiebreak_open = False
+            flash(f'{lineup[selected_index]["name"]} から開始します')
+            st.rerun()
+    with c2:
+        if st.button(
+            "キャンセル",
+            key="cancel_tiebreak",
+            use_container_width=True,
+        ):
+            st.session_state.tiebreak_open = False
             st.rerun()
 
 
@@ -2848,6 +2960,9 @@ def score_page():
 
     else:
         pitching_input(game)
+
+    if game["current_mode"] == "offense":
+        tiebreak_panel(game)
 
     side_switch_panel(game)
     substitution_panel(game)
