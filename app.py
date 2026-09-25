@@ -945,6 +945,7 @@ def batting_stats(rows):
         "E": 0,
         "SH": 0,
         "SF": 0,
+        "RBI": 0,
     }
 
     for row in rows:
@@ -954,6 +955,7 @@ def batting_stats(rows):
         )
 
         s["PA"] += 1
+        s["RBI"] += int(row.get("rbi") or 0)
 
         if result == "四球":
             s["BB"] += 1
@@ -2053,7 +2055,7 @@ def batting_input(game):
         f'<div class="player-box">'
         f'<div class="player-meta">{batting_order}番</div>'
         f'<div class="player-name">{esc(batter["name"])}</div>'
-        f'<div class="player-meta">今日 {stats["AB"]}打数 {stats["H"]}安打</div>'
+        f'<div class="player-meta">今日 {stats["AB"]}打数 {stats["H"]}安打 {stats["RBI"]}打点</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -2086,6 +2088,15 @@ def batting_input(game):
             key="hit_type",
         )
 
+    rbi = st.number_input(
+        "打点",
+        min_value=0,
+        max_value=4,
+        value=0,
+        step=1,
+        key="bat_rbi",
+    )
+
     if st.button(
         "この打席を登録",
         type="primary",
@@ -2102,6 +2113,7 @@ def batting_input(game):
                 "field": field,
                 "batted_type": None,
                 "hit_type": hit_type,
+                "rbi": int(rbi),
             })
             .execute()
         )
@@ -2155,6 +2167,10 @@ def batting_input(game):
         elif result_text == "失策":
             result_text = f"{direction}失" if direction else "失策"
 
+        row_rbi = int(row.get("rbi") or 0)
+        if row_rbi:
+            result_text += f"　{row_rbi}打点"
+
         prefix = f"{order}番" if order else f"{i}人目"
 
         if st.button(
@@ -2202,6 +2218,15 @@ def batting_input(game):
                     key=f'edit_hit_type_{row["id"]}',
                 )
 
+            edit_rbi = st.number_input(
+                "打点",
+                min_value=0,
+                max_value=4,
+                value=int(row.get("rbi") or 0),
+                step=1,
+                key=f'edit_bat_rbi_{row["id"]}',
+            )
+
             if st.button(
                 "変更を保存",
                 type="primary",
@@ -2215,6 +2240,7 @@ def batting_input(game):
                         "field": edit_field,
                         "batted_type": None,
                         "hit_type": edit_hit_type,
+                        "rbi": int(edit_rbi),
                     })
                     .eq("id", row["id"])
                     .execute()
@@ -2939,6 +2965,7 @@ def today_game_stats(game):
                     "2B": stats["2B"],
                     "3B": stats["3B"],
                     "HR": stats["HR"],
+                    "打点": stats["RBI"],
                     "四球": stats["BB"],
                     "死球": stats["HBP"],
                     "三振": stats["SO"],
@@ -3417,7 +3444,8 @@ def game_detail(game):
         )
 
         meta.append(
-            f'{stats["H"]}安打'
+            f'{stats["H"]}安打　'
+            f'{stats["RBI"]}打点'
         )
 
         meta.append(
@@ -3776,7 +3804,8 @@ def individual_stats():
         st.write(
             f'二塁打 **{stats["2B"]}**　'
             f'三塁打 **{stats["3B"]}**　'
-            f'本塁打 **{stats["HR"]}**'
+            f'本塁打 **{stats["HR"]}**　'
+            f'打点 **{stats["RBI"]}**'
         )
 
         st.write(
