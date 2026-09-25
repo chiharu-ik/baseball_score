@@ -3490,3 +3490,28 @@ elif page == "過去の試合":
 else:
     st.session_state.page = "ホーム"
     st.rerun()
+
+
+/* =========================================================
+   STREAMLIT ALERT
+   黄色背景＋白文字を使わない
+   ========================================================= */
+
+div[data-testid="stAlert"] {
+    background-color: #ffffff !important;
+    border: 1px solid #d9e1dc !important;
+    border-left: 5px solid #123c2b !important;
+    border-radius: 14px !important;
+    color: #172019 !important;
+    padding: 0.9rem 1rem !important;
+}
+
+div[data-testid="stAlert"] * {
+    color: #172019 !important;
+}
+
+/* warningアイコン */
+div[data-testid="stAlert"] svg {
+    fill: #123c2b !important;
+    color: #123c2b !important;
+}
