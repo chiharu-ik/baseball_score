@@ -4047,97 +4047,190 @@ def history_page():
             st.rerun()
 
 
+
+def compact_individual_table(rows):
+    html_rows = []
+    for l1, v1, l2, v2 in rows:
+        html_rows.append(
+            "<tr>"
+            f'<td class="stat-label">{esc(l1)}</td><td class="stat-value">{esc(v1)}</td>'
+            f'<td class="stat-label">{esc(l2)}</td><td class="stat-value">{esc(v2)}</td>'
+            "</tr>"
+        )
+    st.markdown('<table class="individual-stat-table">' + "".join(html_rows) + "</table>", unsafe_allow_html=True)
+
+
+def render_batting_summary_table(players, batting_rows):
+    body = []
+    for p in players:
+        s = batting_stats([r for r in batting_rows if r.get("player_id") == p["id"]])
+        if s["PA"] <= 0:
+            continue
+        body.append(
+            "<tr>"
+            f'<td class="player-cell">{esc(p["name"])}<span class="player-grade">{esc(p.get("grade") or "未設定")}</span></td>'
+            f'<td>{s["PA"]}</td><td>{s["AB"]}</td><td>{s["H"]}</td><td>{s["HR"]}</td>'
+            f'<td>{s.get("RBI", 0)}</td><td>{s["BB"]}</td><td>{s["HBP"]}</td><td>{s["SO"]}</td>'
+            f'<td>{format_avg(s["AVG"])}</td><td>{format_avg(s["OBP"])}</td><td>{format_avg(s["SLG"])}</td><td>{format_avg(s["OPS"])}</td>'
+            "</tr>"
+        )
+    if not body:
+        st.caption("対象となる打撃成績がありません。")
+        return
+    st.markdown(
+        '<div class="stats-table-wrap"><table class="stats-table"><thead><tr>'
+        '<th>選手</th><th>打席</th><th>打数</th><th>安打</th><th>HR</th><th>打点</th>'
+        '<th>四球</th><th>死球</th><th>三振</th><th>打率</th><th>出塁率</th><th>長打率</th><th>OPS</th>'
+        '</tr></thead><tbody>' + "".join(body) + '</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_pitching_summary_table(players, game_ids):
+    body = []
+    for p in players:
+        s = pitching_summary(game_ids, p["id"])
+        if s["G"] <= 0 and s["BF"] <= 0:
+            continue
+        era = "―" if s["ERA"] is None else f'{s["ERA"]:.2f}'
+        body.append(
+            "<tr>"
+            f'<td class="player-cell">{esc(p["name"])}<span class="player-grade">{esc(p.get("grade") or "未設定")}</span></td>'
+            f'<td>{s["G"]}</td><td>{format_innings(s["IP_OUTS"])}</td><td>{s["H"]}</td>'
+            f'<td>{s["SO"]}</td><td>{s["BB"]}</td><td>{s["HBP"]}</td><td>{s["HR"]}</td>'
+            f'<td>{s["R"]}</td><td>{s["ER"]}</td><td>{era}</td>'
+            "</tr>"
+        )
+    if not body:
+        st.caption("対象となる投球成績がありません。")
+        return
+    st.markdown(
+        '<div class="stats-table-wrap"><table class="stats-table"><thead><tr>'
+        '<th>投手</th><th>登板</th><th>投球回</th><th>被安打</th><th>奪三振</th>'
+        '<th>与四球</th><th>与死球</th><th>被本塁打</th><th>失点</th><th>自責点</th><th>防御率</th>'
+        '</tr></thead><tbody>' + "".join(body) + '</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+
 # =========================================================
 # INDIVIDUAL STATS
 # =========================================================
 
-def individual_stats():
-    all_players = get_players(False)
 
+def batting_individual_stats():
+    all_players = get_players(False)
     if not all_players:
         st.info("選手が登録されていません。")
         return
 
-    selected_grades = grade_filter(all_players, "individual_grades")
+    selected_grades = grade_filter(all_players, "batting_individual_grades")
     players = filter_players_by_grade(all_players, selected_grades)
-
     if not players:
         st.info("選択した学年に選手がいません。")
         return
 
-    games = game_filter_ui("individual")
+    games = game_filter_ui("batting_individual")
+    if not games:
+        st.info("条件に該当する試合がありません。")
+        return
 
+    game_ids = [g["id"] for g in games]
+    batting_rows = get_batting_rows(game_ids)
+
+    section("打撃成績一覧")
+    render_batting_summary_table(players, batting_rows)
+    st.caption("表は左右にスクロールできます。")
+
+    section("選手別の打撃成績")
+    pid = st.selectbox(
+        "選手", [p["id"] for p in players],
+        format_func=player_name, key="batting_individual_player"
+    )
+    selected_player = next((p for p in players if p["id"] == pid), None)
+    if selected_player:
+        st.caption(f'学年：{selected_player.get("grade") or "未設定"}')
+
+    stats = batting_stats([r for r in batting_rows if r.get("player_id") == pid])
+
+    st.markdown(
+        '<div class="key-stats">'
+        f'<div class="key-stat"><div class="key-stat-label">打率</div><div class="key-stat-value">{format_avg(stats["AVG"])}</div></div>'
+        f'<div class="key-stat"><div class="key-stat-label">出塁率</div><div class="key-stat-value">{format_avg(stats["OBP"])}</div></div>'
+        f'<div class="key-stat"><div class="key-stat-label">OPS</div><div class="key-stat-value">{format_avg(stats["OPS"])}</div></div>'
+        '</div>', unsafe_allow_html=True
+    )
+
+    compact_individual_table([
+        ("打席", stats["PA"], "打数", stats["AB"]),
+        ("安打", stats["H"], "打点", stats.get("RBI", 0)),
+        ("二塁打", stats["2B"], "三塁打", stats["3B"]),
+        ("本塁打", stats["HR"], "長打率", format_avg(stats["SLG"])),
+        ("四球", stats["BB"], "死球", stats["HBP"]),
+        ("三振", stats["SO"], "犠打", stats["SH"]),
+        ("犠飛", stats["SF"], "失策", stats.get("E", 0)),
+    ])
+
+
+def pitching_individual_stats():
+    all_players = get_players(False)
+    if not all_players:
+        st.info("選手が登録されていません。")
+        return
+
+    selected_grades = grade_filter(all_players, "pitching_individual_grades")
+    players = filter_players_by_grade(all_players, selected_grades)
+    if not players:
+        st.info("選択した学年に選手がいません。")
+        return
+
+    games = game_filter_ui("pitching_individual")
     if not games:
         st.info("条件に該当する試合がありません。")
         return
 
     game_ids = [g["id"] for g in games]
 
-    # まず全選手の打撃成績をコンパクトな一覧表で確認できる
-    section("打撃成績一覧")
-    render_batting_summary_table(
-        players,
-        get_batting_rows(game_ids),
-    )
-    st.caption("表は左右にスクロールできます。選手名は左側に固定されます。")
+    section("投球成績一覧")
+    render_pitching_summary_table(players, game_ids)
+    st.caption("表は左右にスクロールできます。")
 
-    section("選手別の詳細")
+    pitcher_players = []
+    for p in players:
+        s = pitching_summary(game_ids, p["id"])
+        if s["G"] > 0 or s["BF"] > 0:
+            pitcher_players.append(p)
 
+    if not pitcher_players:
+        st.caption("この条件では投手記録がありません。")
+        return
+
+    section("選手別の投球成績")
     pid = st.selectbox(
-        "選手",
-        [p["id"] for p in players],
-        format_func=player_name,
-        key="individual_player",
+        "投手", [p["id"] for p in pitcher_players],
+        format_func=player_name, key="pitching_individual_player"
+    )
+    selected_player = next((p for p in pitcher_players if p["id"] == pid), None)
+    if selected_player:
+        st.caption(f'学年：{selected_player.get("grade") or "未設定"}')
+
+    stats = pitching_summary(game_ids, pid)
+    era_text = "―" if stats["ERA"] is None else f'{stats["ERA"]:.2f}'
+
+    st.markdown(
+        '<div class="key-stats">'
+        f'<div class="key-stat"><div class="key-stat-label">防御率</div><div class="key-stat-value">{era_text}</div></div>'
+        f'<div class="key-stat"><div class="key-stat-label">登板</div><div class="key-stat-value">{stats["G"]}</div></div>'
+        f'<div class="key-stat"><div class="key-stat-label">投球回</div><div class="key-stat-value">{format_innings(stats["IP_OUTS"])}</div></div>'
+        '</div>', unsafe_allow_html=True
     )
 
-    selected_player = next((p for p in players if p["id"] == pid), None)
-
-    if selected_player and selected_player.get("grade"):
-        st.caption(f'学年：{selected_player["grade"]}')
-
-    batting_tab, pitching_tab = st.tabs(["打撃", "投手"])
-
-    with batting_tab:
-        stats = batting_stats(get_batting_rows(game_ids, pid))
-
-        st.markdown(
-            '<div class="key-stats">'
-            f'<div class="key-stat"><div class="key-stat-label">打率</div><div class="key-stat-value">{format_avg(stats["AVG"])}</div></div>'
-            f'<div class="key-stat"><div class="key-stat-label">出塁率</div><div class="key-stat-value">{format_avg(stats["OBP"])}</div></div>'
-            f'<div class="key-stat"><div class="key-stat-label">OPS</div><div class="key-stat-value">{format_avg(stats["OPS"])}</div></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        compact_individual_table([
-            ("打席", stats["PA"], "打数", stats["AB"]),
-            ("安打", stats["H"], "打点", stats["RBI"]),
-            ("二塁打", stats["2B"], "三塁打", stats["3B"]),
-            ("本塁打", stats["HR"], "長打率", format_avg(stats["SLG"])),
-            ("四球", stats["BB"], "死球", stats["HBP"]),
-            ("三振", stats["SO"], "犠打", stats["SH"]),
-            ("犠飛", stats["SF"], "失策出塁", stats.get("E", 0)),
-        ])
-
-    with pitching_tab:
-        stats = pitching_summary(game_ids, pid)
-        era_text = "―" if stats["ERA"] is None else f'{stats["ERA"]:.2f}'
-
-        st.markdown(
-            '<div class="key-stats">'
-            f'<div class="key-stat"><div class="key-stat-label">防御率</div><div class="key-stat-value">{era_text}</div></div>'
-            f'<div class="key-stat"><div class="key-stat-label">登板</div><div class="key-stat-value">{stats["G"]}</div></div>'
-            f'<div class="key-stat"><div class="key-stat-label">投球回</div><div class="key-stat-value">{format_innings(stats["IP_OUTS"])}</div></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        compact_individual_table([
-            ("対戦打者", stats["BF"], "被安打", stats["H"]),
-            ("奪三振", stats["SO"], "与四球", stats["BB"]),
-            ("与死球", stats["HBP"], "被本塁打", stats["HR"]),
-            ("失点", stats["R"], "自責点", stats["ER"]),
-        ])
+    compact_individual_table([
+        ("対戦打者", stats["BF"], "被安打", stats["H"]),
+        ("奪三振", stats["SO"], "与四球", stats["BB"]),
+        ("与死球", stats["HBP"], "被本塁打", stats["HR"]),
+        ("失点", stats["R"], "自責点", stats["ER"]),
+    ])
 
 
 # =========================================================
@@ -4330,29 +4423,27 @@ def team_stats():
 # STATS PAGE
 # =========================================================
 
-def stats_page():
-    page_header(
-        "成績確認",
-        st.session_state.team[
-            "team_name"
-        ],
-    )
 
-    t1, t2, t3 = st.tabs(
-        [
-            "個人成績",
-            "ランキング",
-            "チーム成績",
-        ]
-    )
+def stats_page():
+    page_header("成績確認", st.session_state.team["team_name"])
+
+    t1, t2, t3, t4 = st.tabs([
+        "打撃個人成績",
+        "投球個人成績",
+        "ランキング",
+        "チーム成績",
+    ])
 
     with t1:
-        individual_stats()
+        batting_individual_stats()
 
     with t2:
-        ranking_stats()
+        pitching_individual_stats()
 
     with t3:
+        ranking_stats()
+
+    with t4:
         team_stats()
 
 
