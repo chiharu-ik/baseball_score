@@ -658,10 +658,35 @@ def safe_date(value):
 
 # =========================================================
 # URL STATE
-# リロードしてもチーム・試合を復元する
+# リロードしてもチーム・最近使ったチームを復元する
 # =========================================================
 
-def sync_url_state(team=None, game_id=None):
+def recent_team_codes():
+    codes = []
+    for team in st.session_state.get("recent_teams", []):
+        code = str(team.get("team_code") or "").strip().upper()
+        if code and code not in codes:
+            codes.append(code)
+    return codes[:8]
+
+
+def sync_recent_teams_url():
+    """
+    Streamlitのsession_stateはブラウザ更新で消えることがあるため、
+    最近使ったチームのコードだけURLにも保存する。
+    """
+    try:
+        codes = recent_team_codes()
+
+        if codes:
+            st.query_params["recent"] = ",".join(codes)
+        elif "recent" in st.query_params:
+            del st.query_params["recent"]
+    except Exception:
+        pass
+
+
+def sync_url_state(team=None, game_id=None, keep_recent=True):
     try:
         if team:
             st.query_params["team"] = team.get("team_code", "")
@@ -674,11 +699,65 @@ def sync_url_state(team=None, game_id=None):
         else:
             if "game" in st.query_params:
                 del st.query_params["game"]
+
+        if keep_recent:
+            sync_recent_teams_url()
+
     except Exception:
         pass
 
 
+def restore_recent_teams_from_url():
+    """
+    リロード後に「最近使ったチーム」を復元する。
+    """
+    if st.session_state.get("recent_teams"):
+        return
+
+    try:
+        raw = st.query_params.get("recent")
+    except Exception:
+        return
+
+    if not raw:
+        return
+
+    codes = []
+    for code in str(raw).split(","):
+        code = code.strip().upper()
+        if code and code not in codes:
+            codes.append(code)
+
+    restored = []
+
+    for code in codes[:8]:
+        try:
+            rows = (
+                supabase.table("teams")
+                .select("*")
+                .eq("team_code", code)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            rows = []
+
+        if rows:
+            team = rows[0]
+            restored.append({
+                "id": team["id"],
+                "team_name": team["team_name"],
+                "team_code": team["team_code"],
+            })
+
+    st.session_state.recent_teams = restored
+
+
 def restore_from_url():
+    # 最近使ったチームは、現在チームの有無に関係なく先に復元
+    restore_recent_teams_from_url()
+
     # すでにチームが復元済みなら何もしない
     if st.session_state.team:
         return
@@ -692,46 +771,58 @@ def restore_from_url():
     if not code:
         return
 
-    result = (
-        supabase.table("teams")
-        .select("*")
-        .eq("team_code", str(code).strip().upper())
-        .execute()
-        .data
-    )
+    try:
+        result = (
+            supabase.table("teams")
+            .select("*")
+            .eq("team_code", str(code).strip().upper())
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        result = []
 
     if not result:
-        sync_url_state(None, None)
+        # 現在チームだけ解除。recentは残す。
+        sync_url_state(None, None, keep_recent=True)
         return
 
     selected = result[0]
     st.session_state.team = selected
-    add_recent_team(selected)
+    add_recent_team(selected, sync_url=False)
 
     if gid:
-        game_result = (
-            supabase.table("games")
-            .select("*")
-            .eq("id", gid)
-            .eq("team_id", selected["id"])
-            .eq("status", "playing")
-            .execute()
-            .data
-        )
+        try:
+            game_result = (
+                supabase.table("games")
+                .select("*")
+                .eq("id", gid)
+                .eq("team_id", selected["id"])
+                .eq("status", "playing")
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            game_result = []
+
         if game_result:
             st.session_state.game_id = game_result[0]["id"]
             st.session_state.page = "スコア入力"
+            sync_recent_teams_url()
             return
 
     st.session_state.game_id = None
     st.session_state.page = "ホーム"
+    sync_recent_teams_url()
 
 
 # =========================================================
 # RECENT TEAMS
 # =========================================================
 
-def add_recent_team(team):
+def add_recent_team(team, sync_url=True):
     if not team:
         return
 
@@ -750,6 +841,9 @@ def add_recent_team(team):
     ] + existing
 
     st.session_state.recent_teams = st.session_state.recent_teams[:8]
+
+    if sync_url:
+        sync_recent_teams_url()
 
 
 def open_team(team):
@@ -804,8 +898,8 @@ def change_team():
     st.session_state.edit_pitching_id = None
     st.session_state.delete_pitching_id = None
 
-    # 「チームを変更」のときだけ保存したURL状態を消す
-    sync_url_state(None, None)
+    # 現在のチーム/試合だけ解除し、「最近使ったチーム」はURLに残す
+    sync_url_state(None, None, keep_recent=True)
     st.rerun()
 
 
@@ -1515,6 +1609,10 @@ def team_gate():
             st.session_state.team = team
             st.session_state.created_team = None
             st.session_state.page = "ホーム"
+            st.session_state.game_id = None
+
+            # 作成直後のチームもURLに保存して、リロード後に自動復帰
+            sync_url_state(team, None)
 
             st.rerun()
 
@@ -4510,6 +4608,7 @@ elif page == "選手登録":
 
 elif page == "成績確認":
     stats_page()
+    st.stop()
 
 elif page == "過去の試合":
     history_page()
