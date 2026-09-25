@@ -374,6 +374,44 @@ div[data-testid="stAlert"] svg {
 
 
 /* =========================================================
+   SMARTPHONE FORM FIX
+   ========================================================= */
+
+/* 端末のダークモードに引っ張られず、入力欄を読みやすくする */
+.stApp label,
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] *,
+.stApp div[role="radiogroup"] label,
+.stApp div[role="radiogroup"] label * {
+    color: #172019 !important;
+}
+
+div[data-baseweb="input"] > div {
+    background: #ffffff !important;
+    color: #172019 !important;
+    border-color: #dce3de !important;
+}
+
+div[data-baseweb="input"] input {
+    background: #ffffff !important;
+    color: #172019 !important;
+    -webkit-text-fill-color: #172019 !important;
+}
+
+/* ラジオボタンは横幅を超えたら自然に折り返す */
+div[role="radiogroup"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: .42rem .5rem !important;
+    width: 100% !important;
+}
+
+div[role="radiogroup"] > label {
+    margin: 0 !important;
+    min-width: max-content !important;
+}
+
+/* =========================================================
    MOBILE
    ========================================================= */
 
@@ -391,6 +429,63 @@ div[data-testid="stAlert"] svg {
 
     div.stButton > button {
         min-height: 53px;
+    }
+}
+
+@media(max-width:600px) {
+    .block-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-top: 1.35rem !important;
+        padding-left: .75rem !important;
+        padding-right: .75rem !important;
+        padding-bottom: 5rem !important;
+    }
+
+    .bs-title {
+        font-size: 1.42rem !important;
+        margin-top: .25rem !important;
+    }
+
+    .score-box {
+        border-radius: 16px !important;
+        padding: .78rem .8rem !important;
+    }
+
+    .score-row {
+        grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) !important;
+        gap: .3rem !important;
+    }
+
+    .score-team {
+        font-size: .67rem !important;
+    }
+
+    .score-number {
+        font-size: 1.28rem !important;
+    }
+
+    .player-box {
+        padding: .72rem .78rem !important;
+    }
+
+    div[role="radiogroup"] {
+        gap: .35rem .4rem !important;
+    }
+
+    div[role="radiogroup"] > label {
+        flex: 0 0 auto !important;
+        padding-right: .15rem !important;
+    }
+
+    div[role="radiogroup"] > label p {
+        font-size: .86rem !important;
+        white-space: nowrap !important;
+    }
+
+    div.stButton > button {
+        min-height: 48px !important;
+        font-size: .9rem !important;
     }
 }
 
@@ -473,6 +568,77 @@ def safe_date(value):
 
 
 # =========================================================
+# URL STATE
+# リロードしてもチーム・試合を復元する
+# =========================================================
+
+def sync_url_state(team=None, game_id=None):
+    try:
+        if team:
+            st.query_params["team"] = team.get("team_code", "")
+        else:
+            if "team" in st.query_params:
+                del st.query_params["team"]
+
+        if game_id:
+            st.query_params["game"] = str(game_id)
+        else:
+            if "game" in st.query_params:
+                del st.query_params["game"]
+    except Exception:
+        pass
+
+
+def restore_from_url():
+    # すでにチームが復元済みなら何もしない
+    if st.session_state.team:
+        return
+
+    try:
+        code = st.query_params.get("team")
+        gid = st.query_params.get("game")
+    except Exception:
+        return
+
+    if not code:
+        return
+
+    result = (
+        supabase.table("teams")
+        .select("*")
+        .eq("team_code", str(code).strip().upper())
+        .execute()
+        .data
+    )
+
+    if not result:
+        sync_url_state(None, None)
+        return
+
+    selected = result[0]
+    st.session_state.team = selected
+    add_recent_team(selected)
+
+    if gid:
+        game_result = (
+            supabase.table("games")
+            .select("*")
+            .eq("id", gid)
+            .eq("team_id", selected["id"])
+            .eq("status", "playing")
+            .execute()
+            .data
+        )
+        if game_result:
+            st.session_state.game_id = game_result[0]["id"]
+            st.session_state.page = "スコア入力"
+            return
+
+    st.session_state.game_id = None
+    st.session_state.page = "ホーム"
+
+
+# =========================================================
 # RECENT TEAMS
 # =========================================================
 
@@ -525,6 +691,8 @@ def open_team(team):
     if active:
         st.session_state.game_id = active["id"]
 
+    # チームだけURLに保存。ホームのリロードでも自動復帰する
+    sync_url_state(selected, None)
     st.rerun()
 
 
@@ -547,6 +715,8 @@ def change_team():
     st.session_state.edit_pitching_id = None
     st.session_state.delete_pitching_id = None
 
+    # 「チームを変更」のときだけ保存したURL状態を消す
+    sync_url_state(None, None)
     st.rerun()
 
 
@@ -1316,6 +1486,8 @@ def team_gate():
                         st.session_state.game_id = (
                             active["id"]
                         )
+
+                    sync_url_state(team, None)
 
                     flash(
                         f'{team["team_name"]}'
@@ -2909,6 +3081,8 @@ def finish_game_panel(game):
                 None
             )
 
+            sync_url_state(st.session_state.team, None)
+
             st.session_state.finish_open = (
                 False
             )
@@ -3047,6 +3221,9 @@ def score_page():
                 go("新規試合")
 
             return
+
+    # スコア入力中は試合IDもURLに保存。リロード後も同じ試合へ戻す
+    sync_url_state(st.session_state.team, game["id"])
 
     score_header(game)
 
@@ -4165,6 +4342,9 @@ def stats_page():
 # =========================================================
 # ROUTER
 # =========================================================
+
+# ブラウザ更新・再接続時にURLからチーム/試合を復元
+restore_from_url()
 
 if not st.session_state.team:
     team_gate()
