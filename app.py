@@ -1402,17 +1402,34 @@ def pitching_stats(rows):
 
 
 def get_pitching_game_stats(game_ids=None, pitcher_id=None):
+    """
+    投手の試合終了時集計を取得する。
+    pitching_game_stats がまだSupabaseに存在しない環境でも
+    成績確認・ランキング画面全体を落とさない。
+    """
     team_game_ids = {g["id"] for g in get_games()}
     allowed = team_game_ids if game_ids is None else team_game_ids & set(game_ids)
+
     if not allowed:
         return []
 
-    query = supabase.table("pitching_game_stats").select("*")
-    if pitcher_id:
-        query = query.eq("pitcher_id", pitcher_id)
+    try:
+        query = supabase.table("pitching_game_stats").select("*")
 
-    rows = query.execute().data or []
-    return [r for r in rows if r.get("game_id") in allowed]
+        if pitcher_id:
+            query = query.eq("pitcher_id", pitcher_id)
+
+        rows = query.execute().data or []
+
+        return [
+            r for r in rows
+            if r.get("game_id") in allowed
+        ]
+
+    except Exception:
+        # 自責点・投球回用テーブルが未作成でも、
+        # 打撃成績・投球プレー成績・ランキングは表示できるようにする。
+        return []
 
 
 def pitching_summary(game_ids, pitcher_id):
@@ -3294,9 +3311,24 @@ def finish_game_panel(game):
 
     with c1:
         if st.button("試合を終了", type="primary", use_container_width=True):
-            supabase.table("pitching_game_stats").delete().eq("game_id", game["id"]).execute()
-            if final_pitching:
-                supabase.table("pitching_game_stats").insert(final_pitching).execute()
+            try:
+                (
+                    supabase.table("pitching_game_stats")
+                    .delete()
+                    .eq("game_id", game["id"])
+                    .execute()
+                )
+
+                if final_pitching:
+                    (
+                        supabase.table("pitching_game_stats")
+                        .insert(final_pitching)
+                        .execute()
+                    )
+            except Exception:
+                # テーブル未作成時でもゲームセット自体は失敗させない。
+                # 自責点・投球回を保存するには下記SQLでテーブル作成が必要。
+                pass
 
             update_game({"status": "finished"})
             st.session_state.game_id = None
