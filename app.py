@@ -102,9 +102,6 @@ h3 {
     color: #172019;
 }
 
-
-/* BUTTON */
-
 div.stButton > button {
     width: 100%;
     min-height: 52px;
@@ -133,9 +130,6 @@ div.stButton > button[kind="primary"]:hover {
     color: #ffffff;
 }
 
-
-/* INPUT */
-
 div[data-baseweb="input"] > div,
 div[data-baseweb="select"] > div {
     border-radius: 13px;
@@ -145,11 +139,7 @@ div[data-testid="stNumberInput"] input {
     text-align: center;
 }
 
-
-/* ALERT
-   黄色背景＋白文字を使わない
-*/
-
+/* Streamlitの通知も黄色＋白文字にしない */
 div[data-testid="stAlert"] {
     background-color: #ffffff !important;
     border: 1px solid #d9e1dc !important;
@@ -167,9 +157,6 @@ div[data-testid="stAlert"] svg {
     color: #123c2b !important;
     fill: #123c2b !important;
 }
-
-
-/* TEXT */
 
 .bs-logo {
     font-size: 1.75rem;
@@ -201,9 +188,6 @@ div[data-testid="stAlert"] svg {
     letter-spacing: .13em;
     color: #7b837d;
 }
-
-
-/* TEAM */
 
 .team-top {
     padding: .1rem 0 .9rem 0;
@@ -256,9 +240,6 @@ div[data-testid="stAlert"] svg {
     color: #d7e4dc;
 }
 
-
-/* CARDS */
-
 .player-box {
     background: #ffffff;
     border: 1px solid #e2e7e4;
@@ -310,9 +291,6 @@ div[data-testid="stAlert"] svg {
     margin-bottom: .8rem;
 }
 
-
-/* SCORE */
-
 .score-box {
     background: #123c2b;
     color: #ffffff;
@@ -353,7 +331,6 @@ div[data-testid="stAlert"] svg {
     font-weight: 900;
     white-space: nowrap;
 }
-
 
 @media(max-width:600px) {
 
@@ -844,10 +821,7 @@ def get_batting_rows(game_ids=None, player_id=None):
     if not allowed:
         return []
 
-    query = (
-        supabase.table("batting")
-        .select("*")
-    )
+    query = supabase.table("batting").select("*")
 
     if player_id:
         query = query.eq(
@@ -906,7 +880,6 @@ def batting_stats(rows):
             s["SF"] += 1
 
         else:
-            # 安打・アウト・三振・失策は打数に入る
             s["AB"] += 1
 
             if result == "三振":
@@ -943,7 +916,6 @@ def batting_stats(rows):
         + s["SF"]
     )
 
-    # 通常の出塁率では失策出塁は分子に入れない
     s["OBP"] = (
         (
             s["H"]
@@ -1004,10 +976,7 @@ def get_pitching_rows(game_ids=None, pitcher_id=None):
     if not allowed:
         return []
 
-    query = (
-        supabase.table("pitching")
-        .select("*")
-    )
+    query = supabase.table("pitching").select("*")
 
     if pitcher_id:
         query = query.eq(
@@ -1079,16 +1048,12 @@ def pitching_stats(rows):
 
 def team_gate():
     st.markdown(
-        '<div class="bs-logo">'
-        '⚾ Baseball Score'
-        '</div>',
+        '<div class="bs-logo">⚾ Baseball Score</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        '<div class="bs-caption">'
-        '使用するチームを選択してください'
-        '</div>',
+        '<div class="bs-caption">使用するチームを選択してください</div>',
         unsafe_allow_html=True,
     )
 
@@ -1096,30 +1061,21 @@ def team_gate():
         team = st.session_state.created_team
 
         st.markdown(
-            '<div class="success-box">'
-            '✓ チームを作成しました'
-            '</div>',
+            '<div class="success-box">✓ チームを作成しました</div>',
             unsafe_allow_html=True,
         )
 
         st.markdown(
             f'<div class="team-code-card">'
-            f'<div class="team-code-label">'
-            f'TEAM CODE'
-            f'</div>'
-            f'<div class="team-code-value">'
-            f'{esc(team["team_code"])}'
-            f'</div>'
-            f'<div class="team-code-name">'
-            f'{esc(team["team_name"])}'
-            f'</div>'
+            f'<div class="team-code-label">TEAM CODE</div>'
+            f'<div class="team-code-value">{esc(team["team_code"])}</div>'
+            f'<div class="team-code-name">{esc(team["team_name"])}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
         st.caption(
-            "初めて参加するメンバーには、"
-            "このコードを共有してください。"
+            "初めて参加するメンバーには、このコードを共有してください。"
         )
 
         if st.button(
@@ -1174,15 +1130,12 @@ def team_gate():
 
     if mode == "join":
         st.markdown(
-            '<div class="bs-title">'
-            'チームに参加'
-            '</div>',
+            '<div class="bs-title">チームに参加</div>',
             unsafe_allow_html=True,
         )
 
         st.caption(
-            "初めて参加するチームの"
-            "6桁コードを入力してください。"
+            "初めて参加するチームの6桁コードを入力してください。"
         )
 
         code = st.text_input(
@@ -1197,17 +1150,14 @@ def team_gate():
             use_container_width=True,
         ):
             if not code.strip():
-                st.info(
-                    "チームコードを入力してください。"
-                )
+                st.info("チームコードを入力してください。")
 
             else:
                 team = find_team(code)
 
                 if not team:
                     st.error(
-                        "このコードのチームは"
-                        "見つかりませんでした。"
+                        "このコードのチームは見つかりませんでした。"
                     )
 
                 else:
@@ -1223,8 +1173,7 @@ def team_gate():
                         st.session_state.game_id = active["id"]
 
                     flash(
-                        f'{team["team_name"]}'
-                        f' に参加しました！'
+                        f'{team["team_name"]} に参加しました！'
                     )
 
                     st.rerun()
@@ -1239,15 +1188,12 @@ def team_gate():
         return
 
     st.markdown(
-        '<div class="bs-title">'
-        'チームを作成'
-        '</div>',
+        '<div class="bs-title">チームを作成</div>',
         unsafe_allow_html=True,
     )
 
     st.caption(
-        "作成するとメンバー参加用の"
-        "チームコードが発行されます。"
+        "作成するとメンバー参加用のチームコードが発行されます。"
     )
 
     team_name = st.text_input(
@@ -1261,9 +1207,7 @@ def team_gate():
         use_container_width=True,
     ):
         if not team_name.strip():
-            st.info(
-                "チーム名を入力してください。"
-            )
+            st.info("チーム名を入力してください。")
 
         else:
             try:
@@ -1301,12 +1245,9 @@ def home_page():
 
     st.markdown(
         f'<div class="team-top">'
-        f'<div class="team-name">'
-        f'⚾ {esc(team["team_name"])}'
-        f'</div>'
+        f'<div class="team-name">⚾ {esc(team["team_name"])}</div>'
         f'<div class="team-code-inline">'
-        f'TEAM CODE&nbsp;&nbsp;'
-        f'{esc(team["team_code"])}'
+        f'TEAM CODE&nbsp;&nbsp;{esc(team["team_code"])}'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -1330,17 +1271,11 @@ def home_page():
 
         st.markdown(
             f'<div class="history-card">'
-            f'<div class="bs-caption">'
-            f'LIVE GAME'
-            f'</div>'
-            f'<div class="history-score">'
-            f'vs {esc(active["opponent"])}'
-            f'</div>'
+            f'<div class="bs-caption">LIVE GAME</div>'
+            f'<div class="history-score">vs {esc(active["opponent"])}</div>'
             f'<div class="history-meta">'
             f'{inning}回｜{mode}　'
-            f'{active["our_score"]}'
-            f' - '
-            f'{active["their_score"]}'
+            f'{active["our_score"]} - {active["their_score"]}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -1385,22 +1320,15 @@ def home_page():
 
     st.markdown(
         f'<div class="team-code-card">'
-        f'<div class="team-code-label">'
-        f'TEAM CODE'
-        f'</div>'
-        f'<div class="team-code-value">'
-        f'{esc(team["team_code"])}'
-        f'</div>'
-        f'<div class="team-code-name">'
-        f'{esc(team["team_name"])}'
-        f'</div>'
+        f'<div class="team-code-label">TEAM CODE</div>'
+        f'<div class="team-code-value">{esc(team["team_code"])}</div>'
+        f'<div class="team-code-name">{esc(team["team_name"])}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
     st.caption(
-        "初めて参加するメンバーに"
-        "このコードを共有してください。"
+        "初めて参加するメンバーにこのコードを共有してください。"
     )
 
     if st.button(
@@ -1479,8 +1407,7 @@ def player_page():
 
             if existing:
                 st.info(
-                    "同じ名前の選手が"
-                    "すでに登録されています。"
+                    "同じ名前の選手がすでに登録されています。"
                 )
 
             else:
@@ -1499,9 +1426,7 @@ def player_page():
                 )
 
                 flash(
-                    f'{name.strip()}'
-                    f'（{grade}）を'
-                    f'登録しました！'
+                    f'{name.strip()}（{grade}）を登録しました！'
                 )
 
                 st.rerun()
@@ -1514,8 +1439,7 @@ def player_page():
 
     if not players:
         st.info(
-            "まだ選手が"
-            "登録されていません。"
+            "まだ選手が登録されていません。"
         )
         return
 
@@ -1554,12 +1478,8 @@ def player_page():
 
         st.markdown(
             f'<div class="player-box">'
-            f'<div class="player-name">'
-            f'{esc(player["name"])}'
-            f'</div>'
-            f'<div class="player-meta">'
-            f'{esc(" ｜ ".join(meta))}'
-            f'</div>'
+            f'<div class="player-name">{esc(player["name"])}</div>'
+            f'<div class="player-meta">{esc(" ｜ ".join(meta))}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -1579,8 +1499,7 @@ def new_game_page():
 
     if not players:
         st.info(
-            "試合を始めるには、"
-            "先に選手を登録してください。"
+            "試合を始めるには、先に選手を登録してください。"
         )
 
         if st.button(
@@ -1723,8 +1642,7 @@ def new_game_page():
     ):
         if not opponent.strip():
             st.info(
-                "対戦相手を"
-                "入力してください。"
+                "対戦相手を入力してください。"
             )
             return
 
@@ -1777,8 +1695,7 @@ def new_game_page():
 
         if not result:
             st.error(
-                "試合を開始"
-                "できませんでした。"
+                "試合を開始できませんでした。"
             )
             return
 
@@ -1850,22 +1767,13 @@ def score_header(game):
 
     st.markdown(
         f'<div class="score-box">'
-        f'<div class="score-status">'
-        f'{inning}回{half}｜'
-        f'{status}'
-        f'</div>'
+        f'<div class="score-status">{inning}回{half}｜{status}</div>'
         f'<div class="score-row">'
-        f'<div class="score-team">'
-        f'{esc(team["team_name"])}'
-        f'</div>'
+        f'<div class="score-team">{esc(team["team_name"])}</div>'
         f'<div class="score-number">'
-        f'{game["our_score"]}'
-        f' - '
-        f'{game["their_score"]}'
+        f'{game["our_score"]} - {game["their_score"]}'
         f'</div>'
-        f'<div class="score-team right">'
-        f'{esc(game["opponent"])}'
-        f'</div>'
+        f'<div class="score-team right">{esc(game["opponent"])}</div>'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -1881,8 +1789,7 @@ def batting_input(game):
 
     if not lineup:
         st.info(
-            "オーダーが"
-            "登録されていません。"
+            "オーダーが登録されていません。"
         )
         return
 
@@ -1906,24 +1813,14 @@ def batting_input(game):
 
     st.markdown(
         f'<div class="player-box">'
+        f'<div class="player-meta">{batter_index + 1}番</div>'
+        f'<div class="player-name">{esc(batter["name"])}</div>'
         f'<div class="player-meta">'
-        f'{batter_index + 1}番'
-        f'</div>'
-        f'<div class="player-name">'
-        f'{esc(batter["name"])}'
-        f'</div>'
-        f'<div class="player-meta">'
-        f'今日 '
-        f'{stats["AB"]}打数 '
-        f'{stats["H"]}安打'
+        f'今日 {stats["AB"]}打数 {stats["H"]}安打'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
-
-    # =====================================================
-    # 打席結果
-    # =====================================================
 
     result = st.radio(
         "打席結果",
@@ -1943,14 +1840,6 @@ def batting_input(game):
 
     field = None
     hit_type = None
-
-    # =====================================================
-    # 安打・アウト・失策だけ方向を入力
-    #
-    # 投 / 捕 / 一 / 二 / 三 / 遊 / 左 / 中 / 右
-    #
-    # ※ ゴロ・ライナー・フライ・オーバーは使用しない
-    # =====================================================
 
     if result in [
         "安打",
@@ -1973,10 +1862,6 @@ def batting_input(game):
             horizontal=True,
             key="bat_field",
         )
-
-    # =====================================================
-    # 安打の場合だけ安打種別
-    # =====================================================
 
     if result == "安打":
         hit_type = st.radio(
@@ -2005,11 +1890,7 @@ def batting_input(game):
                     "inning": game["current_inning"],
                     "result": result,
                     "field": field,
-
-                    # 過去のDB構造との互換性のため
-                    # 列自体は残すが、新規入力では使わない
                     "batted_type": None,
-
                     "hit_type": hit_type,
                 }
             )
@@ -2027,29 +1908,9 @@ def batting_input(game):
             }
         )
 
-        if result == "失策":
-            flash(
-                f'{batter["name"]}：'
-                f'{field}失を登録'
-            )
-
-        elif result == "安打":
-            flash(
-                f'{batter["name"]}：'
-                f'{field} {hit_type}を登録'
-            )
-
-        elif result == "アウト":
-            flash(
-                f'{batter["name"]}：'
-                f'{field} アウトを登録'
-            )
-
-        else:
-            flash(
-                f'{batter["name"]}：'
-                f'{result}を登録'
-            )
+        flash(
+            f'{batter["name"]}：{result}を登録しました'
+        )
 
         st.rerun()
 
@@ -2082,8 +1943,7 @@ def batting_input(game):
             )
 
             flash(
-                "直前の打席を"
-                "取り消しました"
+                "直前の打席を取り消しました"
             )
 
             st.rerun()
@@ -2096,10 +1956,8 @@ def batting_input(game):
 def pitching_input(game):
     players = get_players()
 
-    current_pid = (
-        game.get(
-            "current_pitcher_id"
-        )
+    current_pid = game.get(
+        "current_pitcher_id"
     )
 
     pitcher = next(
@@ -2111,16 +1969,12 @@ def pitching_input(game):
         None,
     )
 
-    if (
-        pitcher is None
-        and players
-    ):
+    if pitcher is None and players:
         pitcher = players[0]
 
     if not pitcher:
         st.info(
-            "投手が"
-            "登録されていません。"
+            "投手が登録されていません。"
         )
         return
 
@@ -2135,12 +1989,8 @@ def pitching_input(game):
 
     st.markdown(
         f'<div class="player-box">'
-        f'<div class="player-meta">'
-        f'PITCHER'
-        f'</div>'
-        f'<div class="player-name">'
-        f'{esc(pitcher["name"])}'
-        f'</div>'
+        f'<div class="player-meta">PITCHER</div>'
+        f'<div class="player-name">{esc(pitcher["name"])}</div>'
         f'<div class="player-meta">'
         f'H {stats["H"]}　'
         f'K {stats["SO"]}　'
@@ -2196,8 +2046,7 @@ def pitching_input(game):
         )
 
         flash(
-            f"{result} を"
-            f"登録しました"
+            f"{result} を登録しました"
         )
 
         st.rerun()
@@ -2220,8 +2069,7 @@ def pitching_input(game):
             )
 
             flash(
-                "直前の投球結果を"
-                "取り消しました"
+                "直前の投球結果を取り消しました"
             )
 
             st.rerun()
@@ -2258,8 +2106,7 @@ def side_switch_panel(game):
         return
 
     st.info(
-        "終了したイニングの"
-        "得点を入力してください。"
+        "終了したイニングの得点を入力してください。"
     )
 
     runs = st.number_input(
@@ -2276,9 +2123,7 @@ def side_switch_panel(game):
         type="primary",
         use_container_width=True,
     ):
-        current_mode = (
-            game["current_mode"]
-        )
+        current_mode = game["current_mode"]
 
         side = (
             "our"
@@ -2453,10 +2298,8 @@ def substitution_panel(game):
             st.rerun()
 
     else:
-        current_pid = (
-            game.get(
-                "current_pitcher_id"
-            )
+        current_pid = game.get(
+            "current_pitcher_id"
         )
 
         candidates = [
@@ -2467,8 +2310,7 @@ def substitution_panel(game):
 
         if not candidates:
             st.info(
-                "交代できる投手が"
-                "いません。"
+                "交代できる投手がいません。"
             )
             return
 
@@ -2572,6 +2414,138 @@ def finish_game_panel(game):
 
 
 # =========================================================
+# TODAY'S GAME STATS
+# =========================================================
+
+def today_game_stats(game):
+    section("TODAY'S STATS")
+
+    if game["current_mode"] == "offense":
+        st.markdown("### 今日の打撃成績")
+
+        lineup = get_lineup_players(
+            game["id"]
+        )
+
+        if not lineup:
+            st.caption(
+                "まだ打撃成績はありません。"
+            )
+            return
+
+        rows_data = []
+
+        for player in lineup:
+            rows = get_batting_rows(
+                [game["id"]],
+                player["id"],
+            )
+
+            stats = batting_stats(
+                rows
+            )
+
+            rows_data.append(
+                {
+                    "選手": player["name"],
+                    "打数": stats["AB"],
+                    "安打": stats["H"],
+                    "打率": format_avg(
+                        stats["AVG"]
+                    ),
+                    "2B": stats["2B"],
+                    "3B": stats["3B"],
+                    "HR": stats["HR"],
+                    "四球": stats["BB"],
+                    "死球": stats["HBP"],
+                    "三振": stats["SO"],
+                    "失策出塁": stats["E"],
+                }
+            )
+
+        st.dataframe(
+            rows_data,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    else:
+        st.markdown("### 今日の投手成績")
+
+        rows = get_pitching_rows(
+            [game["id"]]
+        )
+
+        pitcher_ids = []
+
+        for row in rows:
+            pid = row["pitcher_id"]
+
+            if pid not in pitcher_ids:
+                pitcher_ids.append(
+                    pid
+                )
+
+        current_pid = game.get(
+            "current_pitcher_id"
+        )
+
+        if (
+            current_pid
+            and current_pid not in pitcher_ids
+        ):
+            pitcher_ids.append(
+                current_pid
+            )
+
+        if not pitcher_ids:
+            st.caption(
+                "まだ投手成績はありません。"
+            )
+            return
+
+        pmap = get_player_map()
+
+        rows_data = []
+
+        for pid in pitcher_ids:
+            pitcher_rows = [
+                r
+                for r in rows
+                if r["pitcher_id"] == pid
+            ]
+
+            stats = pitching_stats(
+                pitcher_rows
+            )
+
+            p = pmap.get(pid)
+
+            rows_data.append(
+                {
+                    "投手": (
+                        p["name"]
+                        if p
+                        else "―"
+                    ),
+                    "対戦打者": stats["BF"],
+                    "被安打": stats["H"],
+                    "奪三振": stats["SO"],
+                    "四球": stats["BB"],
+                    "死球": stats["HBP"],
+                    "被本塁打": stats["HR"],
+                    "失点": stats["R"],
+                }
+            )
+
+        st.dataframe(
+            rows_data,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+# =========================================================
 # SCORE PAGE
 # =========================================================
 
@@ -2594,8 +2568,7 @@ def score_page():
 
         else:
             st.info(
-                "進行中の試合は"
-                "ありません。"
+                "進行中の試合はありません。"
             )
 
             if st.button(
@@ -2616,8 +2589,13 @@ def score_page():
         pitching_input(game)
 
     side_switch_panel(game)
+
     substitution_panel(game)
+
     finish_game_panel(game)
+
+    # ゲームセットの下に今日の成績を表示
+    today_game_stats(game)
 
 
 # =========================================================
@@ -2774,8 +2752,7 @@ def inning_score_table(game):
 
     if not rows:
         st.caption(
-            "イニング別得点は"
-            "ありません。"
+            "イニング別得点はありません。"
         )
         return
 
@@ -2845,21 +2822,13 @@ def inning_score_table(game):
 def game_detail(game):
     st.markdown(
         f'<div class="score-box">'
-        f'<div class="score-status">'
-        f'{esc(game["game_date"])}'
-        f'</div>'
+        f'<div class="score-status">{esc(game["game_date"])}</div>'
         f'<div class="score-row">'
-        f'<div class="score-team">'
-        f'{esc(st.session_state.team["team_name"])}'
-        f'</div>'
+        f'<div class="score-team">{esc(st.session_state.team["team_name"])}</div>'
         f'<div class="score-number">'
-        f'{game["our_score"]}'
-        f' - '
-        f'{game["their_score"]}'
+        f'{game["our_score"]} - {game["their_score"]}'
         f'</div>'
-        f'<div class="score-team right">'
-        f'{esc(game["opponent"])}'
-        f'</div>'
+        f'<div class="score-team right">{esc(game["opponent"])}</div>'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -2944,12 +2913,8 @@ def game_detail(game):
 
         st.markdown(
             f'<div class="player-box">'
-            f'<div class="player-name">'
-            f'{esc(player["name"])}'
-            f'</div>'
-            f'<div class="player-meta">'
-            f'{esc(" ｜ ".join(meta))}'
-            f'</div>'
+            f'<div class="player-name">{esc(player["name"])}</div>'
+            f'<div class="player-meta">{esc(" ｜ ".join(meta))}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -2981,10 +2946,7 @@ def game_detail(game):
         rows = [
             r
             for r in pitching_rows
-            if (
-                r["pitcher_id"]
-                == pid
-            )
+            if r["pitcher_id"] == pid
         ]
 
         stats = pitching_stats(
@@ -2993,9 +2955,7 @@ def game_detail(game):
 
         st.markdown(
             f'<div class="player-box">'
-            f'<div class="player-name">'
-            f'{esc(player_name(pid))}'
-            f'</div>'
+            f'<div class="player-name">{esc(player_name(pid))}</div>'
             f'<div class="player-meta">'
             f'H {stats["H"]} ｜ '
             f'K {stats["SO"]} ｜ '
@@ -3025,16 +2985,13 @@ def history_page():
             st.rerun()
 
         st.markdown(
-            '<div class="bs-title">'
-            '試合詳細'
-            '</div>',
+            '<div class="bs-title">試合詳細</div>',
             unsafe_allow_html=True,
         )
 
         if not game:
             st.error(
-                "試合が"
-                "見つかりませんでした。"
+                "試合が見つかりませんでした。"
             )
             return
 
@@ -3049,16 +3006,12 @@ def history_page():
     all_games = [
         g
         for g in get_games()
-        if (
-            g["status"]
-            == "finished"
-        )
+        if g["status"] == "finished"
     ]
 
     if not all_games:
         st.info(
-            "まだ終了した試合が"
-            "ありません。"
+            "まだ終了した試合がありません。"
         )
         return
 
@@ -3069,14 +3022,12 @@ def history_page():
 
     if not games:
         st.info(
-            "条件に該当する試合は"
-            "ありません。"
+            "条件に該当する試合はありません。"
         )
         return
 
     section(
-        f"試合結果　"
-        f"{len(games)}試合"
+        f"試合結果　{len(games)}試合"
     )
 
     for game in games:
@@ -3118,14 +3069,10 @@ def history_page():
             f'<div class="history-card">'
             f'<div class="history-score">'
             f'{mark}　'
-            f'{game["our_score"]}'
-            f' - '
-            f'{game["their_score"]}　'
+            f'{game["our_score"]} - {game["their_score"]}　'
             f'{esc(game["opponent"])}'
             f'</div>'
-            f'<div class="history-meta">'
-            f'{esc("｜".join(meta))}'
-            f'</div>'
+            f'<div class="history-meta">{esc("｜".join(meta))}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -3151,8 +3098,7 @@ def individual_stats():
 
     if not all_players:
         st.info(
-            "選手が"
-            "登録されていません。"
+            "選手が登録されていません。"
         )
         return
 
@@ -3168,8 +3114,7 @@ def individual_stats():
 
     if not players:
         st.info(
-            "選択した学年に"
-            "選手がいません。"
+            "選択した学年に選手がいません。"
         )
         return
 
@@ -3179,8 +3124,7 @@ def individual_stats():
 
     if not games:
         st.info(
-            "条件に該当する試合が"
-            "ありません。"
+            "条件に該当する試合がありません。"
         )
         return
 
@@ -3214,8 +3158,7 @@ def individual_stats():
         selected_player.get("grade")
     ):
         st.caption(
-            f'学年：'
-            f'{selected_player["grade"]}'
+            f'学年：{selected_player["grade"]}'
         )
 
     batting_tab, pitching_tab = st.tabs(
@@ -3281,8 +3224,7 @@ def individual_stats():
         )
 
         st.write(
-            f'長打率 '
-            f'**{format_avg(stats["SLG"])}**'
+            f'長打率 **{format_avg(stats["SLG"])}**'
         )
 
     with pitching_tab:
@@ -3321,10 +3263,7 @@ def individual_stats():
         )
 
         st.caption(
-            "アウト数・自責点を"
-            "自動管理していないため、"
-            "防御率ではなく失点を"
-            "表示しています。"
+            "アウト数・自責点を自動管理していないため、防御率ではなく失点を表示しています。"
         )
 
 
@@ -3337,8 +3276,7 @@ def ranking_stats():
 
     if not all_players:
         st.info(
-            "選手が"
-            "登録されていません。"
+            "選手が登録されていません。"
         )
         return
 
@@ -3354,8 +3292,7 @@ def ranking_stats():
 
     if not players:
         st.info(
-            "選択した学年に"
-            "選手がいません。"
+            "選択した学年に選手がいません。"
         )
         return
 
@@ -3365,8 +3302,7 @@ def ranking_stats():
 
     if not games:
         st.info(
-            "条件に該当する試合が"
-            "ありません。"
+            "条件に該当する試合がありません。"
         )
         return
 
@@ -3409,7 +3345,9 @@ def ranking_stats():
                 "OPS": s["OPS"],
             }
 
-            value = values[category]
+            value = values[
+                category
+            ]
 
         else:
             s = pitching_stats(
@@ -3457,20 +3395,12 @@ def ranking_stats():
 
         st.markdown(
             f'<div class="history-card">'
-            f'<div style="'
-            f'display:flex;'
-            f'justify-content:space-between;'
-            f'align-items:center;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;">'
             f'<div>'
-            f'<b>{rank}</b>　'
-            f'{esc(row["name"])}'
-            f'<div class="history-meta">'
-            f'{esc(row["grade"])}'
+            f'<b>{rank}</b>　{esc(row["name"])}'
+            f'<div class="history-meta">{esc(row["grade"])}</div>'
             f'</div>'
-            f'</div>'
-            f'<div style="font-size:1.05rem;">'
-            f'<b>{esc(display)}</b>'
-            f'</div>'
+            f'<div style="font-size:1.05rem;"><b>{esc(display)}</b></div>'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -3489,16 +3419,12 @@ def team_stats():
     finished = [
         g
         for g in games
-        if (
-            g["status"]
-            == "finished"
-        )
+        if g["status"] == "finished"
     ]
 
     if not finished:
         st.info(
-            "条件に該当する"
-            "終了済み試合がありません。"
+            "条件に該当する終了済み試合がありません。"
         )
         return
 
@@ -3566,9 +3492,7 @@ def team_stats():
     )
 
     st.caption(
-        "試合ごとの詳細は"
-        "ホームの「過去の試合」から"
-        "確認できます。"
+        "試合ごとの詳細はホームの「過去の試合」から確認できます。"
     )
 
 
