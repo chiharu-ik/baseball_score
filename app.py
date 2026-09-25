@@ -1386,6 +1386,42 @@ def pitching_stats(rows):
     return s
 
 
+def get_pitching_game_stats(game_ids=None, pitcher_id=None):
+    team_game_ids = {g["id"] for g in get_games()}
+    allowed = team_game_ids if game_ids is None else team_game_ids & set(game_ids)
+    if not allowed:
+        return []
+
+    query = supabase.table("pitching_game_stats").select("*")
+    if pitcher_id:
+        query = query.eq("pitcher_id", pitcher_id)
+
+    rows = query.execute().data or []
+    return [r for r in rows if r.get("game_id") in allowed]
+
+
+def pitching_summary(game_ids, pitcher_id):
+    play_rows = get_pitching_rows(game_ids, pitcher_id)
+    base = pitching_stats(play_rows)
+    summary_rows = get_pitching_game_stats(game_ids, pitcher_id)
+
+    game_count = len({r.get("game_id") for r in play_rows})
+    innings_outs = sum(int(r.get("innings_outs") or 0) for r in summary_rows)
+    earned_runs = sum(int(r.get("earned_runs") or 0) for r in summary_rows)
+    era = (earned_runs * 27 / innings_outs) if innings_outs else None
+
+    base["G"] = game_count
+    base["IP_OUTS"] = innings_outs
+    base["ER"] = earned_runs
+    base["ERA"] = era
+    return base
+
+
+def format_innings(outs):
+    outs = int(outs or 0)
+    return f"{outs // 3}.{outs % 3}"
+
+
 # =========================================================
 # TEAM GATE
 # =========================================================
@@ -3186,68 +3222,79 @@ def substitution_panel(game):
 def finish_game_panel(game):
     st.write("")
 
-    if st.button(
-        "ゲームセット",
-        use_container_width=True,
-    ):
-        st.session_state.finish_open = (
-            not st.session_state.finish_open
-        )
+    if st.button("ゲームセット", use_container_width=True):
+        st.session_state.finish_open = not st.session_state.finish_open
 
     if not st.session_state.finish_open:
         return
 
-    st.info(
-        "この試合を終了しますか？"
-    )
+    st.markdown("### 投手の最終成績")
+    st.caption("この試合で登板した投手ごとに、投球回と自責点を入力してください。")
 
+    pitch_rows = get_pitching_rows([game["id"]])
+    pitcher_ids = []
+    for row in pitch_rows:
+        pid = row.get("pitcher_id")
+        if pid and pid not in pitcher_ids:
+            pitcher_ids.append(pid)
+
+    current_pid = game.get("current_pitcher_id")
+    if current_pid and current_pid not in pitcher_ids:
+        pitcher_ids.append(current_pid)
+
+    pmap = get_player_map()
+    final_pitching = []
+
+    if pitcher_ids:
+        for pid in pitcher_ids:
+            name = pmap.get(pid, {}).get("name", "投手")
+            st.markdown(f"**{esc(name)}**")
+            c1, c2, c3 = st.columns([1.2, 1, 1])
+            with c1:
+                full_innings = st.number_input(
+                    "投球回", min_value=0, max_value=20, value=0, step=1,
+                    key=f"finish_ip_{pid}"
+                )
+            with c2:
+                thirds = st.selectbox(
+                    "端数", [0, 1, 2], format_func=lambda x: ["0/3", "1/3", "2/3"][x],
+                    key=f"finish_thirds_{pid}"
+                )
+            with c3:
+                earned = st.number_input(
+                    "自責点", min_value=0, max_value=30, value=0, step=1,
+                    key=f"finish_er_{pid}"
+                )
+            final_pitching.append({
+                "game_id": game["id"],
+                "pitcher_id": pid,
+                "innings_outs": int(full_innings) * 3 + int(thirds),
+                "earned_runs": int(earned),
+            })
+    else:
+        st.caption("この試合の投手記録はありません。")
+
+    st.info("入力内容を保存して、この試合を終了します。")
     c1, c2 = st.columns(2)
 
     with c1:
-        if st.button(
-            "終了する",
-            type="primary",
-            use_container_width=True,
-        ):
-            update_game(
-                {
-                    "status":
-                        "finished"
-                }
-            )
+        if st.button("試合を終了", type="primary", use_container_width=True):
+            supabase.table("pitching_game_stats").delete().eq("game_id", game["id"]).execute()
+            if final_pitching:
+                supabase.table("pitching_game_stats").insert(final_pitching).execute()
 
-            st.session_state.game_id = (
-                None
-            )
-
+            update_game({"status": "finished"})
+            st.session_state.game_id = None
             sync_url_state(st.session_state.team, None)
-
-            st.session_state.finish_open = (
-                False
-            )
-
-            st.session_state.switch_open = (
-                False
-            )
-
-            st.session_state.sub_open = (
-                False
-            )
-
-            flash(
-                "試合を終了しました！"
-            )
-
+            st.session_state.finish_open = False
+            st.session_state.switch_open = False
+            st.session_state.sub_open = False
+            flash("試合を終了しました！")
             go("ホーム")
 
     with c2:
-        if st.button(
-            "キャンセル",
-            use_container_width=True,
-        ):
-            st.session_state.finish_open = (
-                False
-            )
+        if st.button("キャンセル", use_container_width=True):
+            st.session_state.finish_open = False
             st.rerun()
 
 
@@ -4138,47 +4185,26 @@ def individual_stats():
         )
 
     with pitching_tab:
-        stats = pitching_stats(
-            get_pitching_rows(
-                game_ids,
-                pid,
-            )
-        )
+        stats = pitching_summary(game_ids, pid)
 
-        c1, c2, c3 = (
-            st.columns(3)
-        )
-
-        c1.metric(
-            "対戦打者",
-            stats["BF"],
-        )
-
-        c2.metric(
-            "奪三振",
-            stats["SO"],
-        )
-
-        c3.metric(
-            "失点",
-            stats["R"],
-        )
+        c1, c2, c3 = st.columns(3)
+        c1.metric("登板", stats["G"])
+        c2.metric("投球回", format_innings(stats["IP_OUTS"]))
+        c3.metric("防御率", "―" if stats["ERA"] is None else f'{stats["ERA"]:.2f}')
 
         st.write(
+            f'対戦打者 **{stats["BF"]}**　'
             f'被安打 **{stats["H"]}**　'
             f'被本塁打 **{stats["HR"]}**'
         )
-
         st.write(
-            f'四球 **{stats["BB"]}**　'
-            f'死球 **{stats["HBP"]}**'
+            f'奪三振 **{stats["SO"]}**　'
+            f'与四球 **{stats["BB"]}**　'
+            f'与死球 **{stats["HBP"]}**'
         )
-
-        st.caption(
-            "アウト数・自責点を"
-            "自動管理していないため、"
-            "防御率ではなく失点を"
-            "表示しています。"
+        st.write(
+            f'失点 **{stats["R"]}**　'
+            f'自責点 **{stats["ER"]}**'
         )
 
 
@@ -4187,166 +4213,86 @@ def individual_stats():
 # =========================================================
 
 def ranking_stats():
-    all_players = (
-        get_players(False)
-    )
-
+    all_players = get_players(False)
     if not all_players:
-        st.info(
-            "選手が"
-            "登録されていません。"
-        )
+        st.info("選手が登録されていません。")
         return
 
-    selected_grades = (
-        grade_filter(
-            all_players,
-            "ranking_grades",
-        )
-    )
-
-    players = (
-        filter_players_by_grade(
-            all_players,
-            selected_grades,
-        )
-    )
-
+    selected_grades = grade_filter(all_players, "ranking_grades")
+    players = filter_players_by_grade(all_players, selected_grades)
     if not players:
-        st.info(
-            "選択した学年に"
-            "選手がいません。"
-        )
+        st.info("選択した学年に選手がいません。")
         return
 
-    games = game_filter_ui(
-        "ranking"
-    )
-
+    games = game_filter_ui("ranking")
     if not games:
-        st.info(
-            "条件に該当する試合が"
-            "ありません。"
-        )
+        st.info("条件に該当する試合がありません。")
         return
 
-    game_ids = [
-        g["id"]
-        for g in games
-    ]
+    game_ids = [g["id"] for g in games]
+    batting_tab, pitching_tab = st.tabs(["打撃ランキング", "投球ランキング"])
 
-    category = st.selectbox(
-        "ランキング項目",
-        [
-            "打率",
-            "安打",
-            "本塁打",
-            "OPS",
-            "奪三振",
-        ],
-    )
-
-    ranking = []
-
-    for player in players:
-        if category in [
-            "打率",
-            "安打",
-            "本塁打",
-            "OPS",
-        ]:
-            s = batting_stats(
-                get_batting_rows(
-                    game_ids,
-                    player["id"],
-                )
-            )
-
+    with batting_tab:
+        category = st.selectbox(
+            "打撃ランキング項目",
+            ["打率", "出塁率", "OPS", "安打", "本塁打", "打点", "三振", "四球", "死球"],
+            key="bat_ranking_category",
+        )
+        ranking = []
+        for player in players:
+            x = batting_stats(get_batting_rows(game_ids, player["id"]))
             values = {
-                "打率":
-                    s["AVG"],
-                "安打":
-                    s["H"],
-                "本塁打":
-                    s["HR"],
-                "OPS":
-                    s["OPS"],
+                "打率": x["AVG"], "出塁率": x["OBP"], "OPS": x["OPS"],
+                "安打": x["H"], "本塁打": x["HR"], "打点": x["RBI"],
+                "三振": x["SO"], "四球": x["BB"], "死球": x["HBP"],
             }
-
-            value = (
-                values[category]
+            ranking.append({"name": player["name"], "grade": player.get("grade") or "未設定", "value": values[category]})
+        ranking.sort(key=lambda x: x["value"], reverse=True)
+        for rank, row in enumerate(ranking, 1):
+            display = format_avg(row["value"]) if category in ["打率", "出塁率", "OPS"] else str(row["value"])
+            st.markdown(
+                f'<div class="history-card"><div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<div><b>{rank}</b>　{esc(row["name"])}<div class="history-meta">{esc(row["grade"])}</div></div>'
+                f'<div style="font-size:1.05rem;"><b>{esc(display)}</b></div></div></div>',
+                unsafe_allow_html=True,
             )
 
-        else:
-            s = pitching_stats(
-                get_pitching_rows(
-                    game_ids,
-                    player["id"],
-                )
-            )
-
-            value = s["SO"]
-
-        ranking.append(
-            {
-                "name":
-                    player["name"],
-                "grade":
-                    player.get(
-                        "grade"
-                    )
-                    or "未設定",
-                "value":
-                    value,
+    with pitching_tab:
+        category = st.selectbox(
+            "投球ランキング項目",
+            ["防御率", "登板数", "投球回", "奪三振", "与四球", "与死球", "被安打", "被本塁打", "失点", "自責点"],
+            key="pitch_ranking_category",
+        )
+        ranking = []
+        for player in players:
+            x = pitching_summary(game_ids, player["id"])
+            values = {
+                "防御率": x["ERA"], "登板数": x["G"], "投球回": x["IP_OUTS"],
+                "奪三振": x["SO"], "与四球": x["BB"], "与死球": x["HBP"],
+                "被安打": x["H"], "被本塁打": x["HR"], "失点": x["R"], "自責点": x["ER"],
             }
-        )
+            value = values[category]
+            # 防御率は投球回が記録されている投手だけ順位対象
+            if category == "防御率" and value is None:
+                continue
+            ranking.append({"name": player["name"], "grade": player.get("grade") or "未設定", "value": value})
 
-    ranking.sort(
-        key=lambda x: (
-            x["value"]
-        ),
-        reverse=True,
-    )
-
-    for rank, row in enumerate(
-        ranking,
-        start=1,
-    ):
-        display = (
-            format_avg(
-                row["value"]
+        ranking.sort(key=lambda x: x["value"], reverse=(category != "防御率"))
+        if not ranking:
+            st.caption("この条件ではランキング対象の投手成績がありません。")
+        for rank, row in enumerate(ranking, 1):
+            if category == "防御率":
+                display = f'{row["value"]:.2f}'
+            elif category == "投球回":
+                display = format_innings(row["value"])
+            else:
+                display = str(row["value"])
+            st.markdown(
+                f'<div class="history-card"><div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<div><b>{rank}</b>　{esc(row["name"])}<div class="history-meta">{esc(row["grade"])}</div></div>'
+                f'<div style="font-size:1.05rem;"><b>{esc(display)}</b></div></div></div>',
+                unsafe_allow_html=True,
             )
-            if category
-            in [
-                "打率",
-                "OPS",
-            ]
-            else str(
-                row["value"]
-            )
-        )
-
-        st.markdown(
-            f'<div class="history-card">'
-            f'<div style="'
-            f'display:flex;'
-            f'justify-content:space-between;'
-            f'align-items:center;">'
-            f'<div>'
-            f'<b>{rank}</b>　'
-            f'{esc(row["name"])}'
-            f'<div class="history-meta">'
-            f'{esc(row["grade"])}'
-            f'</div>'
-            f'</div>'
-            f'<div style="'
-            f'font-size:1.05rem;">'
-            f'<b>{esc(display)}</b>'
-            f'</div>'
-            f'</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
 
 
 # =========================================================
@@ -4411,7 +4357,7 @@ def team_stats():
 
     c1.metric(
         "戦績",
-        f"{wins}-{losses}-{draws}",
+        f"{wins}勝 {losses}敗 {draws}分",
     )
 
     c2.metric(
