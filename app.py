@@ -3865,170 +3865,138 @@ def inning_score_table(game):
 def game_detail(game):
     st.markdown(
         f'<div class="score-box">'
-        f'<div class="score-status">'
-        f'{esc(game["game_date"])}'
-        f'</div>'
+        f'<div class="score-status">{esc(game["game_date"])}</div>'
         f'<div class="score-row">'
-        f'<div class="score-team">'
-        f'{esc(st.session_state.team["team_name"])}'
-        f'</div>'
-        f'<div class="score-number">'
-        f'{game["our_score"]}'
-        f' - '
-        f'{game["their_score"]}'
-        f'</div>'
-        f'<div class="score-team right">'
-        f'{esc(game["opponent"])}'
-        f'</div>'
+        f'<div class="score-team">{esc(st.session_state.team["team_name"])}</div>'
+        f'<div class="score-number">{game["our_score"]} - {game["their_score"]}</div>'
+        f'<div class="score-team right">{esc(game["opponent"])}</div>'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
     details = []
-
     if game.get("game_type"):
-        details.append(
-            game["game_type"]
-        )
-
+        details.append(game["game_type"])
     if game.get("tournament"):
-        details.append(
-            game["tournament"]
-        )
-
+        details.append(game["tournament"])
     if game.get("place"):
-        details.append(
-            game["place"]
-        )
+        details.append(game["place"])
 
     if details:
-        st.caption(
-            " ｜ ".join(
-                details
-            )
-        )
+        st.caption(" ｜ ".join(details))
 
-    section(
-        "イニングスコア"
-    )
+    section("イニングスコア")
+    inning_score_table(game)
 
-    inning_score_table(
-        game
-    )
+    # -------------------------
+    # 打撃成績
+    # -------------------------
+    section("打撃成績")
 
-    section(
-        "打撃成績"
-    )
+    lineup = get_lineup_players(game["id"])
+    batting_rows = get_batting_rows([game["id"]])
 
-    lineup = (
-        get_lineup_players(
-            game["id"]
-        )
-    )
-
-    if not lineup:
-        st.caption(
-            "打撃記録はありません。"
-        )
+    batting_body = []
 
     for player in lineup:
-        stats = batting_stats(
-            get_batting_rows(
-                [game["id"]],
-                player["id"],
-            )
+        stats = batting_stats([
+            r for r in batting_rows
+            if r.get("player_id") == player["id"]
+        ])
+
+        # 打席がなくても、その試合のラインナップ選手は表示する
+        grade = player.get("grade") or "未設定"
+
+        batting_body.append(
+            "<tr>"
+            f'<td class="player-cell">{esc(player["name"])}'
+            f'<span class="player-grade">{esc(grade)}</span></td>'
+            f'<td>{stats["PA"]}</td>'
+            f'<td>{stats["AB"]}</td>'
+            f'<td>{stats["H"]}</td>'
+            f'<td>{stats["2B"]}</td>'
+            f'<td>{stats["3B"]}</td>'
+            f'<td>{stats["HR"]}</td>'
+            f'<td>{stats.get("RBI", 0)}</td>'
+            f'<td>{stats["BB"]}</td>'
+            f'<td>{stats["HBP"]}</td>'
+            f'<td>{stats["SO"]}</td>'
+            f'<td>{format_avg(stats["AVG"])}</td>'
+            f'<td>{format_avg(stats["OBP"])}</td>'
+            f'<td>{format_avg(stats["OPS"])}</td>'
+            "</tr>"
         )
 
-        meta = []
-
-        if player.get("grade"):
-            meta.append(
-                player["grade"]
-            )
-
-        meta.append(
-            f'{stats["AB"]}打数'
-        )
-
-        meta.append(
-            f'{stats["H"]}安打　'
-            f'{stats["RBI"]}打点'
-        )
-
-        meta.append(
-            format_avg(
-                stats["AVG"]
-            )
-        )
-
+    if batting_body:
         st.markdown(
-            f'<div class="player-box">'
-            f'<div class="player-name">'
-            f'{esc(player["name"])}'
-            f'</div>'
-            f'<div class="player-meta">'
-            f'{esc(" ｜ ".join(meta))}'
-            f'</div>'
-            f'</div>',
+            '<div class="stats-table-wrap">'
+            '<table class="stats-table">'
+            '<thead><tr>'
+            '<th>選手</th><th>打席</th><th>打数</th><th>安打</th>'
+            '<th>二塁打</th><th>三塁打</th><th>HR</th><th>打点</th>'
+            '<th>四球</th><th>死球</th><th>三振</th>'
+            '<th>打率</th><th>出塁率</th><th>OPS</th>'
+            '</tr></thead>'
+            '<tbody>' + "".join(batting_body) + '</tbody>'
+            '</table></div>',
             unsafe_allow_html=True,
         )
+        st.caption("打撃成績は左右にスクロールできます。")
+    else:
+        st.caption("打撃記録はありません。")
 
-    section(
-        "投手成績"
-    )
+    # -------------------------
+    # 投手成績
+    # -------------------------
+    section("投手成績")
 
-    pitching_rows = (
-        get_pitching_rows(
-            [game["id"]]
-        )
-    )
-
+    pitching_rows = get_pitching_rows([game["id"]])
     pitcher_ids = []
 
     for row in pitching_rows:
-        pid = (
-            row["pitcher_id"]
-        )
+        pid = row.get("pitcher_id")
+        if pid is not None and pid not in pitcher_ids:
+            pitcher_ids.append(pid)
 
-        if pid not in pitcher_ids:
-            pitcher_ids.append(
-                pid
-            )
-
-    if not pitcher_ids:
-        st.caption(
-            "投手記録はありません。"
-        )
+    pitching_body = []
 
     for pid in pitcher_ids:
-        rows = [
-            r
-            for r in pitching_rows
-            if (
-                r["pitcher_id"]
-                == pid
-            )
-        ]
+        summary = pitching_summary([game["id"]], pid)
+        era_text = "―" if summary["ERA"] is None else f'{summary["ERA"]:.2f}'
 
-        stats = pitching_stats(
-            rows
+        pitching_body.append(
+            "<tr>"
+            f'<td class="player-cell">{esc(player_name(pid))}</td>'
+            f'<td>{format_innings(summary["IP_OUTS"])}</td>'
+            f'<td>{summary["BF"]}</td>'
+            f'<td>{summary["H"]}</td>'
+            f'<td>{summary["SO"]}</td>'
+            f'<td>{summary["BB"]}</td>'
+            f'<td>{summary["HBP"]}</td>'
+            f'<td>{summary["HR"]}</td>'
+            f'<td>{summary["R"]}</td>'
+            f'<td>{summary["ER"]}</td>'
+            f'<td>{era_text}</td>'
+            "</tr>"
         )
 
+    if pitching_body:
         st.markdown(
-            f'<div class="player-box">'
-            f'<div class="player-name">'
-            f'{esc(player_name(pid))}'
-            f'</div>'
-            f'<div class="player-meta">'
-            f'H {stats["H"]} ｜ '
-            f'K {stats["SO"]} ｜ '
-            f'BB {stats["BB"]} ｜ '
-            f'R {stats["R"]}'
-            f'</div>'
-            f'</div>',
+            '<div class="stats-table-wrap">'
+            '<table class="stats-table">'
+            '<thead><tr>'
+            '<th>投手</th><th>投球回</th><th>対戦打者</th><th>被安打</th>'
+            '<th>奪三振</th><th>与四球</th><th>与死球</th><th>被本塁打</th>'
+            '<th>失点</th><th>自責点</th><th>防御率</th>'
+            '</tr></thead>'
+            '<tbody>' + "".join(pitching_body) + '</tbody>'
+            '</table></div>',
             unsafe_allow_html=True,
         )
+        st.caption("投手成績は左右にスクロールできます。")
+    else:
+        st.caption("投手記録はありません。")
 
 
 # =========================================================
@@ -4557,23 +4525,26 @@ def team_stats():
 def stats_page():
     page_header("成績確認", st.session_state.team["team_name"])
 
-    t1, t2, t3, t4 = st.tabs([
-        "打撃個人成績",
-        "投球個人成績",
-        "ランキング",
-        "チーム成績",
-    ])
+    selected = st.radio(
+        "成績メニュー",
+        ["打撃個人成績", "投球個人成績", "ランキング", "チーム成績"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="stats_main_menu",
+    )
 
-    with t1:
+    # 選択された画面だけを実行する。
+    # st.tabs のように裏側で他の成績画面まで同時実行しない。
+    if selected == "打撃個人成績":
         batting_individual_stats()
 
-    with t2:
+    elif selected == "投球個人成績":
         pitching_individual_stats()
 
-    with t3:
+    elif selected == "ランキング":
         ranking_stats()
 
-    with t4:
+    elif selected == "チーム成績":
         team_stats()
 
 
