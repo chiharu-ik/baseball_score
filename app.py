@@ -2483,19 +2483,37 @@ def pitching_input(game):
         st.info("投手が登録されていません。")
         return
 
+    # 相手打順は 0〜8 の index で保持し、表示時は 1〜9 番にする
+    all_pitch_rows = get_pitching_rows([game["id"]])
+    saved_opponent_index = int(game.get("opponent_batter_index") or 0) % 9
+
+    # この機能追加前から進行中の試合では、既存の投球記録数から打順を補完
+    if saved_opponent_index == 0 and all_pitch_rows:
+        opponent_index = len(all_pitch_rows) % 9
+    else:
+        opponent_index = saved_opponent_index
+
+    opponent_order = opponent_index + 1
+
     pitcher_rows = get_pitching_rows([game["id"]], pitcher["id"])
     stats = pitching_stats(pitcher_rows)
 
     st.markdown(
         f'<div class="player-box">'
-        f'<div class="player-meta">PITCHER</div>'
+        f'<div class="player-meta">相手打者</div>'
+        f'<div class="player-name">{opponent_order}番打者</div>'
+        f'<div class="player-meta" style="margin-top:.55rem;">PITCHER</div>'
         f'<div class="player-name">{esc(pitcher["name"])}</div>'
         f'<div class="player-meta">H {stats["H"]}　K {stats["SO"]}　BB {stats["BB"]}　R {stats["R"]}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-    result_options = ["アウト", "三振", "安打", "二塁打", "三塁打", "本塁打", "四球", "死球", "失策"]
+    result_options = [
+        "アウト", "三振", "安打", "二塁打", "三塁打",
+        "本塁打", "四球", "死球", "失策"
+    ]
+
     result = st.radio(
         "打者結果",
         result_options,
@@ -2519,12 +2537,18 @@ def pitching_input(game):
                 "game_id": game["id"],
                 "pitcher_id": pitcher["id"],
                 "inning": game["current_inning"],
+                "batting_order": opponent_order,
                 "result": result,
                 "runs": int(runs),
             })
             .execute()
         )
-        flash(f"{result} を登録しました")
+
+        update_game({
+            "opponent_batter_index": (opponent_index + 1) % 9
+        })
+
+        flash(f"相手{opponent_order}番　{result} を登録しました")
         st.rerun()
 
     # 現在の回の守備ログだけ表示
@@ -2541,15 +2565,26 @@ def pitching_input(game):
 
     pmap = get_player_map()
 
-    for i, row in enumerate(inning_rows, start=1):
+    # 古い投球記録で batting_order が空の場合は試合内の記録順から補完
+    row_order_fallback = {
+        r.get("id"): ((idx % 9) + 1)
+        for idx, r in enumerate(all_pitch_rows)
+    }
+
+    for row in inning_rows:
         row_pitcher = pmap.get(row.get("pitcher_id"), {})
         pitcher_name = row_pitcher.get("name", "投手")
         result_text = row.get("result") or ""
         row_runs = int(row.get("runs") or 0)
+        batting_order = int(
+            row.get("batting_order")
+            or row_order_fallback.get(row.get("id"), 1)
+        )
         suffix = f"　{row_runs}失点" if row_runs else ""
 
+        # 「何人目」ではなく相手の打順を表示
         if st.button(
-            f"{i}人目　{pitcher_name}　　{result_text}{suffix}　›",
+            f"{batting_order}番　{pitcher_name}　　{result_text}{suffix}　›",
             key=f'open_pitch_{row["id"]}',
             use_container_width=True,
         ):
@@ -2557,19 +2592,34 @@ def pitching_input(game):
                 st.session_state.edit_pitching_id = None
             else:
                 st.session_state.edit_pitching_id = row["id"]
+
             st.session_state.delete_pitching_id = None
             st.rerun()
 
         if st.session_state.get("edit_pitching_id") == row["id"]:
-            st.caption(f'{i}人目の守備記録を編集')
+            st.caption(f'相手{batting_order}番の守備記録を編集')
 
-            old_result = row.get("result") if row.get("result") in result_options else "アウト"
+            edit_order = st.selectbox(
+                "相手打順",
+                list(range(1, 10)),
+                index=max(0, min(8, batting_order - 1)),
+                format_func=lambda n: f"{n}番",
+                key=f'edit_pitch_order_{row["id"]}',
+            )
+
+            old_result = (
+                row.get("result")
+                if row.get("result") in result_options
+                else "アウト"
+            )
+
             edit_result = st.selectbox(
                 "打者結果",
                 result_options,
                 index=result_options.index(old_result),
                 key=f'edit_pitch_result_{row["id"]}',
             )
+
             edit_runs = st.number_input(
                 "このプレーで入った得点",
                 min_value=0,
@@ -2587,10 +2637,15 @@ def pitching_input(game):
             ):
                 (
                     supabase.table("pitching")
-                    .update({"result": edit_result, "runs": int(edit_runs)})
+                    .update({
+                        "batting_order": int(edit_order),
+                        "result": edit_result,
+                        "runs": int(edit_runs),
+                    })
                     .eq("id", row["id"])
                     .execute()
                 )
+
                 st.session_state.edit_pitching_id = None
                 flash("守備記録を変更しました")
                 st.rerun()
@@ -2619,6 +2674,16 @@ def pitching_input(game):
                             .eq("id", row["id"])
                             .execute()
                         )
+
+                        latest_game = get_game()
+                        latest_index = int(
+                            latest_game.get("opponent_batter_index") or 0
+                        ) % 9
+
+                        update_game({
+                            "opponent_batter_index": (latest_index - 1) % 9
+                        })
+
                         st.session_state.edit_pitching_id = None
                         st.session_state.delete_pitching_id = None
                         flash("守備記録を削除しました")
