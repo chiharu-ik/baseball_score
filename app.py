@@ -578,6 +578,197 @@ div[role="radiogroup"] > label {
 .key-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.45rem;margin:.55rem 0 .7rem}.key-stat{background:#fff;border:1px solid #dce3de;border-radius:12px;padding:.62rem .55rem}.key-stat-label{color:#788079;font-size:.62rem;font-weight:800}.key-stat-value{margin-top:.12rem;color:#123c2b;font-size:1.05rem;font-weight:900}
 @media(max-width:600px){.stats-table{font-size:.72rem}.stats-table th,.stats-table td{padding:.55rem .48rem}.individual-stat-table td{padding:.62rem .5rem}.key-stat-value{font-size:.95rem}}
 
+
+/* =========================================================
+   MOBILE UI REFINEMENT
+   Smartphone-first: compact, readable, no white-on-white.
+   ========================================================= */
+:root{
+  --app-green:#123c2b;
+  --app-text:#172019;
+  --app-muted:#737d76;
+  --app-line:#dce3de;
+  --app-bg:#f7f9f7;
+  --app-card:#ffffff;
+  --app-accent:#ff4b55;
+}
+
+html, body, [data-testid="stAppViewContainer"]{
+  background:var(--app-bg) !important;
+  color:var(--app-text) !important;
+}
+
+[data-testid="stMainBlockContainer"]{
+  max-width:760px !important;
+  padding:1rem .8rem 5.5rem !important;
+}
+
+h1{font-size:1.85rem !important;line-height:1.15 !important;margin:.3rem 0 1rem !important}
+h2{font-size:1.25rem !important}
+h3{font-size:1rem !important}
+p, label, .stMarkdown{color:var(--app-text)}
+
+div[data-testid="stVerticalBlock"]{gap:.62rem !important}
+
+/* Inputs */
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stTextInput"] input{
+  min-height:46px !important;
+  border-radius:12px !important;
+}
+
+div[data-baseweb="select"] *{
+  color:#f5f7f6 !important;
+}
+div[data-baseweb="select"] > div{
+  background:#24272f !important;
+}
+div[data-baseweb="popover"] *{
+  color:#172019 !important;
+}
+
+/* Buttons: tap-friendly but not oversized */
+div[data-testid="stButton"] button{
+  min-height:44px !important;
+  border-radius:12px !important;
+  font-size:.88rem !important;
+  padding:.45rem .7rem !important;
+}
+div[data-testid="stButton"] button[kind="primary"]{
+  background:var(--app-green) !important;
+  color:#fff !important;
+  border-color:var(--app-green) !important;
+}
+div[data-testid="stButton"] button[kind="primary"] *{color:#fff !important}
+
+/* Alerts */
+div[data-testid="stAlert"]{
+  background:#fff !important;
+  color:var(--app-text) !important;
+  border:1px solid var(--app-line) !important;
+  border-left:4px solid var(--app-green) !important;
+}
+div[data-testid="stAlert"] *{color:var(--app-text) !important}
+
+/* Tabs / horizontal radio */
+div[data-testid="stTabs"] button{
+  color:var(--app-text) !important;
+  font-size:.82rem !important;
+}
+div[role="radiogroup"] label{
+  color:var(--app-text) !important;
+}
+
+/* Existing app cards */
+.score-box{
+  border-radius:18px !important;
+  padding:1rem .85rem !important;
+  margin:.45rem 0 .7rem !important;
+}
+.score-status{font-size:.72rem !important}
+.score-number{font-size:1.45rem !important}
+.score-team{font-size:.78rem !important}
+.player-box{
+  padding:.85rem .9rem !important;
+  border-radius:15px !important;
+  margin:.45rem 0 !important;
+}
+.player-name{font-size:1.08rem !important}
+.player-meta{font-size:.7rem !important}
+
+/* Compact section headings */
+.section-title{
+  margin:1rem 0 .4rem !important;
+  font-size:.78rem !important;
+}
+
+/* Mobile scoreboard */
+.mobile-scoreboard{
+  width:100%;
+  background:#fff;
+  border:1px solid var(--app-line);
+  border-radius:14px;
+  overflow:hidden;
+  margin:.45rem 0 .2rem;
+}
+.mobile-score-grid{
+  display:grid;
+  grid-template-columns:minmax(74px,1.5fr) repeat(var(--score-cols),minmax(28px,1fr)) minmax(34px,.8fr);
+  align-items:stretch;
+}
+.mobile-score-cell{
+  min-width:0;
+  padding:.48rem .18rem;
+  border-right:1px solid #edf0ee;
+  border-bottom:1px solid #edf0ee;
+  text-align:center;
+  color:var(--app-text);
+  font-size:.72rem;
+  line-height:1.15;
+}
+.mobile-score-cell:nth-last-child(-n + 1){font-weight:900}
+.mobile-score-team{
+  text-align:left;
+  padding-left:.55rem;
+  font-weight:900;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.mobile-score-head{
+  background:#eef3f0;
+  color:#566159;
+  font-size:.65rem;
+  font-weight:900;
+}
+.mobile-score-click{
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--app-text);
+  font-weight:900;
+  padding:0;
+  margin:0;
+}
+
+/* score editing panel */
+.score-edit-panel{
+  background:#fff;
+  border:1px solid var(--app-line);
+  border-radius:14px;
+  padding:.7rem;
+  margin:.5rem 0;
+}
+
+/* Stats stay horizontally scrollable; everything else fits phone */
+.stats-table-wrap{
+  max-width:100% !important;
+  border-radius:12px !important;
+}
+.stats-table{
+  font-size:.68rem !important;
+}
+.stats-table th,.stats-table td{
+  padding:.48rem .42rem !important;
+}
+
+/* Hide Streamlit chrome spacing on phone */
+@media(max-width:600px){
+  [data-testid="stMainBlockContainer"]{
+    padding:.65rem .62rem 5rem !important;
+  }
+  h1{font-size:1.55rem !important}
+  .score-box{padding:.82rem .7rem !important}
+  .score-number{font-size:1.25rem !important}
+  .mobile-score-cell{font-size:.68rem;padding:.43rem .1rem}
+  .mobile-score-team{font-size:.66rem;padding-left:.38rem}
+  div[data-testid="stNumberInput"] button{
+    min-width:40px !important;
+  }
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -2452,9 +2643,8 @@ def score_header(game):
 
 def editable_inning_score_table(game):
     """
-    スコア入力画面上部のイニング得点表。
-    入力済みの得点セルをタップすると、その回の得点を修正できる。
-    修正時は試合の総得点もイニング得点から再計算する。
+    スマホ専用のコンパクトなイニング得点表。
+    入力済みセルだけタップ可能。タップ後は表の直下で修正する。
     """
     rows = (
         supabase.table("inning_scores")
@@ -2470,10 +2660,10 @@ def editable_inning_score_table(game):
         return
 
     max_recorded = max(int(r.get("inning") or 1) for r in rows)
-    max_inning = max(7, max_recorded, int(game.get("current_inning") or 1))
+    # 通常は7回までを基準。延長時だけ必要な列を追加。
+    max_inning = max(7, max_recorded)
     innings = list(range(1, max_inning + 1))
 
-    # 同じ回・同じ側に複数行がある古いデータにも対応
     score_map = {}
     row_map = {}
     for row in rows:
@@ -2482,160 +2672,163 @@ def editable_inning_score_table(game):
         row_map[key] = row
 
     st.markdown(
-        '<div style="margin:.65rem 0 .25rem;font-size:.72rem;'
-        'font-weight:900;color:#77817a;">イニングスコア</div>',
+        '<div style="margin:.65rem 0 .28rem;font-size:.68rem;'
+        'font-weight:900;color:#737d76;">イニングスコア</div>',
         unsafe_allow_html=True,
     )
 
-    # 見出し
-    widths = [1.65] + [0.72] * len(innings) + [0.85]
-    header_cols = st.columns(widths)
-    header_cols[0].markdown("**チーム**")
-    for i, inning in enumerate(innings, start=1):
-        header_cols[i].markdown(f"**{inning}**")
-    header_cols[-1].markdown("**計**")
+    # Streamlitの大量columnsはスマホで崩れやすいため、
+    # 1つのHTML表として表示し、直下にセル選択用の小さなボタンを置く。
+    def score_value(side, inning):
+        key = (inning, side)
+        return str(score_map[key]) if key in score_map else "−"
 
-    def draw_score_row(side, team_name, total):
-        cols = st.columns(widths)
-        cols[0].markdown(
-            f'<div style="padding-top:.55rem;font-size:.72rem;'
-            f'font-weight:900;white-space:nowrap;overflow:hidden;'
-            f'text-overflow:ellipsis;">{esc(team_name)}</div>',
-            unsafe_allow_html=True,
+    header = "".join(
+        f'<th>{inning}</th>' for inning in innings
+    )
+
+    our_cells = "".join(
+        f'<td>{score_value("our", inning)}</td>' for inning in innings
+    )
+    their_cells = "".join(
+        f'<td>{score_value("their", inning)}</td>' for inning in innings
+    )
+
+    table_html = (
+        '<div class="mobile-scoreboard">'
+        '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
+        '<thead><tr>'
+        '<th style="width:22%;text-align:left;padding:.5rem .35rem;'
+        'font-size:.62rem;background:#eef3f0;color:#566159;">チーム</th>'
+        + header +
+        '<th>R</th></tr></thead>'
+        '<tbody>'
+        '<tr><td style="text-align:left;font-weight:900;padding:.5rem .35rem;'
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+        + esc(st.session_state.team["team_name"]) + '</td>'
+        + our_cells +
+        f'<td style="font-weight:900;">{int(game.get("our_score") or 0)}</td></tr>'
+        '<tr><td style="text-align:left;font-weight:900;padding:.5rem .35rem;'
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+        + esc(game["opponent"]) + '</td>'
+        + their_cells +
+        f'<td style="font-weight:900;">{int(game.get("their_score") or 0)}</td></tr>'
+        '</tbody></table></div>'
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+    # 得点表そのものを視覚表示し、その直下に「修正する回」をコンパクトに配置。
+    # Streamlit標準ではHTMLセルのクリックイベントをPythonへ直接返せないため、
+    # 入力済み得点だけを小さいボタンとして並べる。
+    with st.expander("得点を修正", expanded=bool(st.session_state.get("editing_inning_score"))):
+        options = []
+        option_map = {}
+
+        for side in ("our", "their"):
+            team_label = (
+                st.session_state.team["team_name"]
+                if side == "our"
+                else game["opponent"]
+            )
+            for inning in innings:
+                row = row_map.get((inning, side))
+                if row is None:
+                    continue
+                label = f'{inning}回 {team_label}：{int(row.get("runs") or 0)}点'
+                options.append(label)
+                option_map[label] = row
+
+        if not options:
+            st.caption("修正できる得点はまだありません。")
+            return
+
+        current_id = st.session_state.get("editing_inning_score")
+        current_index = 0
+        if current_id:
+            for i, label in enumerate(options):
+                if option_map[label]["id"] == current_id:
+                    current_index = i
+                    break
+
+        selected_label = st.selectbox(
+            "修正する得点",
+            options,
+            index=current_index,
+            key="inning_score_edit_select",
+        )
+        target = option_map[selected_label]
+        st.session_state.editing_inning_score = target["id"]
+
+        new_runs = st.number_input(
+            "得点",
+            min_value=0,
+            max_value=30,
+            value=int(target.get("runs") or 0),
+            step=1,
+            key=f'edit_inning_runs_{target["id"]}',
         )
 
-        for i, inning in enumerate(innings, start=1):
-            key = (inning, side)
-            row = row_map.get(key)
+        c1, c2 = st.columns(2)
 
-            if row is None:
-                cols[i].markdown(
-                    '<div style="text-align:center;padding:.55rem 0;'
-                    'color:#a4aaa6;">-</div>',
-                    unsafe_allow_html=True,
-                )
-                continue
-
-            runs = score_map[key]
-
-            if cols[i].button(
-                str(runs),
-                key=f'edit_inning_score_{game["id"]}_{side}_{inning}',
+        with c1:
+            if st.button(
+                "変更を保存",
+                type="primary",
                 use_container_width=True,
+                key=f'save_inning_score_{target["id"]}',
             ):
-                current = st.session_state.get("editing_inning_score")
-                new_value = None if current == row["id"] else row["id"]
-                st.session_state.editing_inning_score = new_value
+                (
+                    supabase.table("inning_scores")
+                    .update({"runs": int(new_runs)})
+                    .eq("id", target["id"])
+                    .execute()
+                )
+
+                refreshed = (
+                    supabase.table("inning_scores")
+                    .select("side,runs")
+                    .eq("game_id", game["id"])
+                    .execute()
+                    .data
+                    or []
+                )
+
+                our_total = sum(
+                    int(r.get("runs") or 0)
+                    for r in refreshed
+                    if r.get("side") == "our"
+                )
+                their_total = sum(
+                    int(r.get("runs") or 0)
+                    for r in refreshed
+                    if r.get("side") == "their"
+                )
+
+                (
+                    supabase.table("games")
+                    .update({
+                        "our_score": our_total,
+                        "their_score": their_total,
+                    })
+                    .eq("id", game["id"])
+                    .execute()
+                )
+
+                st.session_state.editing_inning_score = None
+                flash(
+                    f'{int(target["inning"])}回の得点を'
+                    f'{int(new_runs)}点に変更しました'
+                )
                 st.rerun()
 
-        cols[-1].markdown(
-            f'<div style="text-align:center;padding:.55rem 0;'
-            f'font-weight:900;">{int(total or 0)}</div>',
-            unsafe_allow_html=True,
-        )
-
-    draw_score_row(
-        "our",
-        st.session_state.team["team_name"],
-        game.get("our_score", 0),
-    )
-    draw_score_row(
-        "their",
-        game["opponent"],
-        game.get("their_score", 0),
-    )
-
-    editing_id = st.session_state.get("editing_inning_score")
-    if not editing_id:
-        st.caption("入力済みの得点をタップすると修正できます。")
-        return
-
-    target = next((r for r in rows if r["id"] == editing_id), None)
-    if not target:
-        st.session_state.editing_inning_score = None
-        return
-
-    side_label = (
-        st.session_state.team["team_name"]
-        if target["side"] == "our"
-        else game["opponent"]
-    )
-
-    st.markdown(
-        f'**{int(target["inning"])}回｜{esc(side_label)} の得点を修正**'
-    )
-
-    new_runs = st.number_input(
-        "得点",
-        min_value=0,
-        max_value=30,
-        value=int(target.get("runs") or 0),
-        step=1,
-        key=f'edit_inning_runs_{target["id"]}',
-    )
-
-    c1, c2 = st.columns(2)
-
-    with c1:
-        if st.button(
-            "変更を保存",
-            type="primary",
-            use_container_width=True,
-            key=f'save_inning_score_{target["id"]}',
-        ):
-            (
-                supabase.table("inning_scores")
-                .update({"runs": int(new_runs)})
-                .eq("id", target["id"])
-                .execute()
-            )
-
-            # 修正後のイニング得点から総得点を再計算
-            refreshed = (
-                supabase.table("inning_scores")
-                .select("side,runs")
-                .eq("game_id", game["id"])
-                .execute()
-                .data
-                or []
-            )
-
-            our_total = sum(
-                int(r.get("runs") or 0)
-                for r in refreshed
-                if r.get("side") == "our"
-            )
-            their_total = sum(
-                int(r.get("runs") or 0)
-                for r in refreshed
-                if r.get("side") == "their"
-            )
-
-            (
-                supabase.table("games")
-                .update({
-                    "our_score": our_total,
-                    "their_score": their_total,
-                })
-                .eq("id", game["id"])
-                .execute()
-            )
-
-            st.session_state.editing_inning_score = None
-            flash(
-                f'{int(target["inning"])}回の得点を'
-                f'{int(new_runs)}点に変更しました'
-            )
-            st.rerun()
-
-    with c2:
-        if st.button(
-            "キャンセル",
-            use_container_width=True,
-            key=f'cancel_inning_score_{target["id"]}',
-        ):
-            st.session_state.editing_inning_score = None
-            st.rerun()
+        with c2:
+            if st.button(
+                "閉じる",
+                use_container_width=True,
+                key=f'close_inning_score_{target["id"]}',
+            ):
+                st.session_state.editing_inning_score = None
+                st.rerun()
 
 
 # =========================================================
