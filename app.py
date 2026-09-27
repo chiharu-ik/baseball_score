@@ -154,6 +154,27 @@ div[data-testid="stNumberInput"] input {
     text-align: center;
 }
 
+/* スマホで radio / select の文字が背景と同化しないよう明示 */
+div[data-testid="stRadio"] label,
+div[data-testid="stRadio"] label *,
+div[data-testid="stSelectbox"] label,
+div[data-testid="stSelectbox"] label *,
+div[data-testid="stMultiSelect"] label,
+div[data-testid="stMultiSelect"] label *,
+div[data-baseweb="select"] *,
+div[role="radiogroup"] label,
+div[role="radiogroup"] label * {
+    color: #172019 !important;
+    -webkit-text-fill-color: #172019 !important;
+    opacity: 1 !important;
+}
+
+/* BaseWeb の選択済み文字も白抜けさせない */
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] div {
+    color: #172019 !important;
+    -webkit-text-fill-color: #172019 !important;
+}
 
 /* =========================================================
    ALERT
@@ -472,6 +493,44 @@ def safe_date(value):
         return date.today()
 
 
+def _qp_first(name, default=None):
+    """Streamlit query parameterを安全に1件取得する。"""
+    try:
+        value = st.query_params.get(name, default)
+        if isinstance(value, list):
+            return value[0] if value else default
+        return value
+    except Exception:
+        return default
+
+
+def persist_team_to_url(team):
+    """リロード後も同じチームへ戻れるようURLにチームコードを保持する。"""
+    if not team:
+        return
+    try:
+        st.query_params["team"] = str(team.get("team_code") or "")
+        recent = []
+        for t in st.session_state.get("recent_teams", []):
+            code = str(t.get("team_code") or "").strip()
+            if code and code not in recent:
+                recent.append(code)
+        current = str(team.get("team_code") or "").strip()
+        if current and current not in recent:
+            recent.insert(0, current)
+        st.query_params["recent"] = ",".join(recent[:8])
+    except Exception:
+        pass
+
+
+def clear_current_team_from_url():
+    try:
+        if "team" in st.query_params:
+            del st.query_params["team"]
+    except Exception:
+        pass
+
+
 # =========================================================
 # RECENT TEAMS
 # =========================================================
@@ -495,6 +554,9 @@ def add_recent_team(team):
     ] + existing
 
     st.session_state.recent_teams = st.session_state.recent_teams[:8]
+
+    # session_stateだけに置くとブラウザ更新で消えるためURLにも保持
+    persist_team_to_url(team)
 
 
 def open_team(team):
@@ -531,6 +593,9 @@ def open_team(team):
 def change_team():
     if st.session_state.team:
         add_recent_team(st.session_state.team)
+
+    # 「チームを変更」を押した時だけ自動復帰を解除する
+    clear_current_team_from_url()
 
     st.session_state.team = None
     st.session_state.game_id = None
@@ -4057,6 +4122,58 @@ def stats_page():
 
     with t3:
         team_stats()
+
+
+# =========================================================
+# RELOAD RESTORE
+# =========================================================
+
+def restore_team_after_reload():
+    """ブラウザ更新でsession_stateが初期化されてもチームを復元する。"""
+    if st.session_state.team:
+        return
+
+    # 最近使ったチームもURLから復元
+    recent_raw = _qp_first("recent", "") or ""
+    restored_recent = []
+    for code in [x.strip().upper() for x in str(recent_raw).split(",") if x.strip()]:
+        try:
+            t = find_team(code)
+        except Exception:
+            t = None
+        if t and all(x.get("id") != t.get("id") for x in restored_recent):
+            restored_recent.append({
+                "id": t["id"],
+                "team_name": t["team_name"],
+                "team_code": t["team_code"],
+            })
+    if restored_recent:
+        st.session_state.recent_teams = restored_recent[:8]
+
+    code = str(_qp_first("team", "") or "").strip().upper()
+    if not code:
+        return
+
+    try:
+        team = find_team(code)
+    except Exception:
+        team = None
+
+    if not team:
+        clear_current_team_from_url()
+        return
+
+    st.session_state.team = team
+    st.session_state.page = "ホーム"
+    st.session_state.team_gate_mode = None
+    st.session_state.selected_history_game = None
+    add_recent_team(team)
+
+    active = get_active_game()
+    st.session_state.game_id = active["id"] if active else None
+
+
+restore_team_after_reload()
 
 
 # =========================================================
