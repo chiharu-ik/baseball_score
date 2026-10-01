@@ -2720,115 +2720,128 @@ def editable_inning_score_table(game):
     # 得点表そのものを視覚表示し、その直下に「修正する回」をコンパクトに配置。
     # Streamlit標準ではHTMLセルのクリックイベントをPythonへ直接返せないため、
     # 入力済み得点だけを小さいボタンとして並べる。
-    with st.expander("得点を修正", expanded=bool(st.session_state.get("editing_inning_score"))):
-        options = []
-        option_map = {}
+    # 「得点を修正」を押した時だけ編集欄を開く
+    edit_open_key = f'inning_score_editor_open_{game["id"]}'
+    if edit_open_key not in st.session_state:
+        st.session_state[edit_open_key] = False
 
-        for side in ("our", "their"):
-            team_label = (
-                st.session_state.team["team_name"]
-                if side == "our"
-                else game["opponent"]
+    if not st.session_state[edit_open_key]:
+        if st.button(
+            "得点を修正",
+            use_container_width=True,
+            key=f'open_inning_score_editor_{game["id"]}',
+        ):
+            st.session_state[edit_open_key] = True
+            st.rerun()
+        return
+
+    options = []
+    option_map = {}
+
+    for side in ("our", "their"):
+        team_label = (
+            st.session_state.team["team_name"]
+            if side == "our"
+            else game["opponent"]
+        )
+        for inning in innings:
+            row = row_map.get((inning, side))
+            if row is None:
+                continue
+            label = f'{inning}回 {team_label}：{int(row.get("runs") or 0)}点'
+            options.append(label)
+            option_map[label] = row
+
+    if not options:
+        st.caption("修正できる得点はまだありません。")
+        if st.button(
+            "閉じる",
+            use_container_width=True,
+            key=f'close_empty_score_editor_{game["id"]}',
+        ):
+            st.session_state[edit_open_key] = False
+            st.rerun()
+        return
+
+    selected_label = st.selectbox(
+        "修正する得点",
+        options,
+        key=f'inning_score_edit_select_{game["id"]}',
+    )
+    target = option_map[selected_label]
+
+    new_runs = st.number_input(
+        "得点",
+        min_value=0,
+        max_value=30,
+        value=int(target.get("runs") or 0),
+        step=1,
+        key=f'edit_inning_runs_{target["id"]}',
+    )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        if st.button(
+            "変更を保存",
+            type="primary",
+            use_container_width=True,
+            key=f'save_inning_score_{target["id"]}',
+        ):
+            (
+                supabase.table("inning_scores")
+                .update({"runs": int(new_runs)})
+                .eq("id", target["id"])
+                .execute()
             )
-            for inning in innings:
-                row = row_map.get((inning, side))
-                if row is None:
-                    continue
-                label = f'{inning}回 {team_label}：{int(row.get("runs") or 0)}点'
-                options.append(label)
-                option_map[label] = row
 
-        if not options:
-            st.caption("修正できる得点はまだありません。")
-            return
+            refreshed = (
+                supabase.table("inning_scores")
+                .select("side,runs")
+                .eq("game_id", game["id"])
+                .execute()
+                .data
+                or []
+            )
 
-        current_id = st.session_state.get("editing_inning_score")
-        current_index = 0
-        if current_id:
-            for i, label in enumerate(options):
-                if option_map[label]["id"] == current_id:
-                    current_index = i
-                    break
+            our_total = sum(
+                int(r.get("runs") or 0)
+                for r in refreshed
+                if r.get("side") == "our"
+            )
+            their_total = sum(
+                int(r.get("runs") or 0)
+                for r in refreshed
+                if r.get("side") == "their"
+            )
 
-        selected_label = st.selectbox(
-            "修正する得点",
-            options,
-            index=current_index,
-            key="inning_score_edit_select",
-        )
-        target = option_map[selected_label]
-        st.session_state.editing_inning_score = target["id"]
+            (
+                supabase.table("games")
+                .update({
+                    "our_score": our_total,
+                    "their_score": their_total,
+                })
+                .eq("id", game["id"])
+                .execute()
+            )
 
-        new_runs = st.number_input(
-            "得点",
-            min_value=0,
-            max_value=30,
-            value=int(target.get("runs") or 0),
-            step=1,
-            key=f'edit_inning_runs_{target["id"]}',
-        )
+            st.session_state[edit_open_key] = False
+            st.session_state.editing_inning_score = None
+            flash(
+                f'{int(target["inning"])}回の得点を'
+                f'{int(new_runs)}点に変更しました'
+            )
+            st.rerun()
 
-        c1, c2 = st.columns(2)
-
-        with c1:
-            if st.button(
-                "変更を保存",
-                type="primary",
-                use_container_width=True,
-                key=f'save_inning_score_{target["id"]}',
-            ):
-                (
-                    supabase.table("inning_scores")
-                    .update({"runs": int(new_runs)})
-                    .eq("id", target["id"])
-                    .execute()
-                )
-
-                refreshed = (
-                    supabase.table("inning_scores")
-                    .select("side,runs")
-                    .eq("game_id", game["id"])
-                    .execute()
-                    .data
-                    or []
-                )
-
-                our_total = sum(
-                    int(r.get("runs") or 0)
-                    for r in refreshed
-                    if r.get("side") == "our"
-                )
-                their_total = sum(
-                    int(r.get("runs") or 0)
-                    for r in refreshed
-                    if r.get("side") == "their"
-                )
-
-                (
-                    supabase.table("games")
-                    .update({
-                        "our_score": our_total,
-                        "their_score": their_total,
-                    })
-                    .eq("id", game["id"])
-                    .execute()
-                )
-
-                st.session_state.editing_inning_score = None
-                flash(
-                    f'{int(target["inning"])}回の得点を'
-                    f'{int(new_runs)}点に変更しました'
-                )
-                st.rerun()
-
-        with c2:
-            if st.button(
-                "閉じる",
-                use_container_width=True,
-                key=f'close_inning_score_{target["id"]}',
-            ):
-                st.session_state.editing_inning_score = None
-                st.rerun()
+    with c2:
+        if st.button(
+            "キャンセル",
+            use_container_width=True,
+            key=f'cancel_inning_score_editor_{game["id"]}',
+        ):
+            st.session_state[edit_open_key] = False
+            st.session_state.editing_inning_score = None
+            st.rerun()
 
 
 # =========================================================
