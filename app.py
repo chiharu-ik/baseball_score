@@ -851,99 +851,53 @@ def safe_date(value):
 
 
 # =========================================================
-# DEVICE PERSISTENCE
-# タスクキル/セッション切れ後も現在チーム・最近使ったチームを復元
+# PERSISTENT TEAM ACCESS (Supabase fallback)
+# タスクキルでsession/URLが消えてもチーム履歴を復元する
 # =========================================================
 
-def device_key():
-    """
-    Streamlitがブラウザに持つCookieから、このブラウザ用の匿名キーを作る。
-    Cookie値そのものはDBへ保存しない。
-    """
-    try:
-        import hashlib
-        cookies = dict(st.context.cookies)
-        raw = (
-            cookies.get("_streamlit_xsrf")
-            or cookies.get("ajs_anonymous_id")
-            or cookies.get("ajs_user_id")
-        )
-        if raw:
-            return hashlib.sha256(str(raw).encode("utf-8")).hexdigest()
-    except Exception:
-        pass
-
-    # Cookieが取得できない環境ではURL方式へフォールバック
-    return None
-
-
-def save_device_team_state(current_team=None):
-    key = device_key()
-    if not key:
+def remember_team_access(team):
+    if not team:
         return
-
-    recent_codes = []
-    for t in st.session_state.get("recent_teams", []):
-        c = str(t.get("team_code") or "").strip().upper()
-        if c and c not in recent_codes:
-            recent_codes.append(c)
-
-    current_code = None
-    if current_team:
-        current_code = str(current_team.get("team_code") or "").strip().upper()
-
-    payload = {
-        "device_key": key,
-        "current_team_code": current_code,
-        "recent_team_codes": recent_codes[:8],
-    }
-
     try:
         (
-            supabase.table("device_team_state")
-            .upsert(payload, on_conflict="device_key")
+            supabase.table("remembered_teams")
+            .upsert(
+                {
+                    "team_id": team["id"],
+                    "team_code": team["team_code"],
+                    "team_name": team["team_name"],
+                    "last_used_at": datetime.now().isoformat(),
+                },
+                on_conflict="team_id",
+            )
             .execute()
         )
     except Exception:
-        # テーブル未作成時でもアプリ本体は止めない
         pass
 
 
-def restore_device_team_state():
-    """
-    新しいStreamlitセッションになった時、Supabaseから
-    現在チームと最近使ったチームを復元する。
-    """
-    key = device_key()
-    if not key:
-        return False
-
+def load_persistent_recent_teams(limit=8):
     try:
         rows = (
-            supabase.table("device_team_state")
+            supabase.table("remembered_teams")
             .select("*")
-            .eq("device_key", key)
-            .limit(1)
+            .order("last_used_at", desc=True)
+            .limit(limit)
             .execute()
             .data
             or []
         )
     except Exception:
-        return False
+        return []
 
-    if not rows:
-        return False
-
-    state = rows[0]
-    recent_codes = state.get("recent_team_codes") or []
-
-    restored_recent = []
-    for team_code in recent_codes:
+    result = []
+    for row in rows:
         try:
             teams = (
                 supabase.table("teams")
                 .select("*")
-                .eq("team_code", str(team_code).strip().upper())
+                .eq("id", row["team_id"])
+                .limit(1)
                 .execute()
                 .data
                 or []
@@ -953,22 +907,46 @@ def restore_device_team_state():
 
         if teams:
             t = teams[0]
-            restored_recent.append({
+            result.append({
                 "id": t["id"],
                 "team_name": t["team_name"],
                 "team_code": t["team_code"],
             })
 
-    if restored_recent:
-        st.session_state.recent_teams = restored_recent[:8]
+    return result
 
-    current_code = state.get("current_team_code")
-    if current_code and not st.session_state.get("team"):
+
+def restore_after_taskkill():
+    """
+    session_state とURLの両方が空でもSupabaseから復元。
+    メインチーム「りこなん」が記憶済みならそこへ自動復帰する。
+    それ以外は最近使ったチームとして初期画面に復元する。
+    """
+    if st.session_state.get("team"):
+        return
+
+    persistent = load_persistent_recent_teams()
+
+    if persistent:
+        st.session_state.recent_teams = persistent
+
+    # このアプリのメインチームは「りこなん」。
+    # 記憶済みのりこなんがあれば、タスクキル後は自動で戻す。
+    main_team = next(
+        (
+            t for t in persistent
+            if str(t.get("team_name") or "").strip() == "りこなん"
+        ),
+        None,
+    )
+
+    if main_team:
         try:
             teams = (
                 supabase.table("teams")
                 .select("*")
-                .eq("team_code", str(current_code).strip().upper())
+                .eq("id", main_team["id"])
+                .limit(1)
                 .execute()
                 .data
                 or []
@@ -980,9 +958,7 @@ def restore_device_team_state():
             st.session_state.team = teams[0]
             st.session_state.page = "ホーム"
             st.session_state.game_id = None
-            return True
-
-    return bool(restored_recent)
+            sync_url_state(teams[0], None)
 
 
 # =========================================================
@@ -1016,9 +992,6 @@ def sync_recent_teams_url():
 
 
 def sync_url_state(team=None, game_id=None, keep_recent=True):
-    # URLだけでなく端末用状態も永続化
-    save_device_team_state(team)
-
     try:
         if team:
             st.query_params["team"] = team.get("team_code", "")
@@ -1174,11 +1147,11 @@ def add_recent_team(team, sync_url=True):
 
     st.session_state.recent_teams = st.session_state.recent_teams[:8]
 
+    # Supabaseにも履歴を保存するので、タスクキルでも消えない
+    remember_team_access(team)
+
     if sync_url:
         sync_recent_teams_url()
-
-    # セッションが切れても復元できるようSupabaseにも保存
-    save_device_team_state(st.session_state.get("team"))
 
 
 def open_team(team):
@@ -5376,11 +5349,11 @@ def stats_page():
 # =========================================================
 
 # ブラウザ更新・再接続時にURLからチーム/試合を復元
-# タスクキル等でsession_stateが消えた場合は端末保存から先に復元
-if not st.session_state.team:
-    restore_device_team_state()
-
 restore_from_url()
+
+# タスクキル等でURL/sessionが両方消えた場合の最終復元
+if not st.session_state.team:
+    restore_after_taskkill()
 
 if not st.session_state.team:
     team_gate()
