@@ -3777,6 +3777,73 @@ def substitution_panel(game):
             st.rerun()
 
 
+
+def save_inning_score_and_recalculate(game_id, inning, side, runs):
+    """1イニングの得点を保存/修正し、試合総得点を再計算する。"""
+    existing = (
+        supabase.table("inning_scores")
+        .select("*")
+        .eq("game_id", game_id)
+        .eq("inning", int(inning))
+        .eq("side", side)
+        .execute()
+        .data
+        or []
+    )
+
+    if existing:
+        # 古い重複データがあっても先頭行を正として更新
+        (
+            supabase.table("inning_scores")
+            .update({"runs": int(runs)})
+            .eq("id", existing[0]["id"])
+            .execute()
+        )
+    else:
+        (
+            supabase.table("inning_scores")
+            .insert({
+                "game_id": game_id,
+                "inning": int(inning),
+                "side": side,
+                "runs": int(runs),
+            })
+            .execute()
+        )
+
+    refreshed = (
+        supabase.table("inning_scores")
+        .select("side,runs")
+        .eq("game_id", game_id)
+        .execute()
+        .data
+        or []
+    )
+
+    our_total = sum(
+        int(r.get("runs") or 0)
+        for r in refreshed
+        if r.get("side") == "our"
+    )
+    their_total = sum(
+        int(r.get("runs") or 0)
+        for r in refreshed
+        if r.get("side") == "their"
+    )
+
+    (
+        supabase.table("games")
+        .update({
+            "our_score": our_total,
+            "their_score": their_total,
+        })
+        .eq("id", game_id)
+        .execute()
+    )
+
+    return our_total, their_total
+
+
 # =========================================================
 # FINISH GAME
 # =========================================================
@@ -3789,6 +3856,41 @@ def finish_game_panel(game):
 
     if not st.session_state.finish_open:
         return
+
+    # 最後の攻守は「攻守交替」を押さずにゲームセットするため、
+    # ここで現在の半イニングの得点を必ず入力できるようにする。
+    current_side = "our" if game["current_mode"] == "offense" else "their"
+    current_team_name = (
+        st.session_state.team["team_name"]
+        if current_side == "our"
+        else game["opponent"]
+    )
+
+    existing_final = (
+        supabase.table("inning_scores")
+        .select("*")
+        .eq("game_id", game["id"])
+        .eq("inning", int(game["current_inning"]))
+        .eq("side", current_side)
+        .execute()
+        .data
+        or []
+    )
+    current_saved_runs = int(existing_final[0].get("runs") or 0) if existing_final else 0
+
+    st.markdown("### 最終回の得点")
+    st.caption(
+        f'{int(game["current_inning"])}回｜{current_team_name} の得点を入力してから試合を終了します。'
+    )
+
+    final_runs = st.number_input(
+        "この回の得点",
+        min_value=0,
+        max_value=30,
+        value=current_saved_runs,
+        step=1,
+        key=f'finish_final_runs_{game["id"]}_{game["current_inning"]}_{current_side}',
+    )
 
     st.markdown("### 投手の最終成績")
     st.caption("この試合で登板した投手ごとに、投球回と自責点を入力してください。")
@@ -3819,7 +3921,8 @@ def finish_game_panel(game):
                 )
             with c2:
                 thirds = st.selectbox(
-                    "端数", [0, 1, 2], format_func=lambda x: ["0/3", "1/3", "2/3"][x],
+                    "端数", [0, 1, 2],
+                    format_func=lambda x: ["0/3", "1/3", "2/3"][x],
                     key=f"finish_thirds_{pid}"
                 )
             with c3:
@@ -3827,6 +3930,7 @@ def finish_game_panel(game):
                     "自責点", min_value=0, max_value=30, value=0, step=1,
                     key=f"finish_er_{pid}"
                 )
+
             final_pitching.append({
                 "game_id": game["id"],
                 "pitcher_id": pid,
@@ -3836,11 +3940,19 @@ def finish_game_panel(game):
     else:
         st.caption("この試合の投手記録はありません。")
 
-    st.info("入力内容を保存して、この試合を終了します。")
+    st.info("最終回の得点と投手成績を保存して、この試合を終了します。")
     c1, c2 = st.columns(2)
 
     with c1:
         if st.button("試合を終了", type="primary", use_container_width=True):
+            # 最終回の得点を保存。すでに保存済みなら更新するので二重加算しない。
+            save_inning_score_and_recalculate(
+                game["id"],
+                game["current_inning"],
+                current_side,
+                int(final_runs),
+            )
+
             try:
                 (
                     supabase.table("pitching_game_stats")
@@ -3856,8 +3968,6 @@ def finish_game_panel(game):
                         .execute()
                     )
             except Exception:
-                # テーブル未作成時でもゲームセット自体は失敗させない。
-                # 自責点・投球回を保存するには下記SQLでテーブル作成が必要。
                 pass
 
             update_game({"status": "finished"})
@@ -3866,7 +3976,10 @@ def finish_game_panel(game):
             st.session_state.finish_open = False
             st.session_state.switch_open = False
             st.session_state.sub_open = False
-            flash("試合を終了しました！")
+            st.session_state.tiebreak_open = False
+            st.session_state.tiebreak_active = False
+            st.session_state.tiebreak_waiting_second_half = False
+            flash("最終回の得点を保存して試合を終了しました！")
             go("ホーム")
 
     with c2:
@@ -4297,6 +4410,99 @@ def inning_score_table(game):
 # GAME DETAIL
 # =========================================================
 
+
+def history_score_editor(game):
+    """過去試合ではイニング得点だけ編集可能。打撃/投球ログは編集しない。"""
+    rows = (
+        supabase.table("inning_scores")
+        .select("*")
+        .eq("game_id", game["id"])
+        .order("inning")
+        .execute()
+        .data
+        or []
+    )
+
+    if not rows:
+        st.caption("編集できるイニング得点がありません。")
+        return
+
+    open_key = f'history_score_editor_open_{game["id"]}'
+
+    if not st.session_state.get(open_key, False):
+        if st.button(
+            "点数を変更",
+            use_container_width=True,
+            key=f'open_history_score_editor_{game["id"]}',
+        ):
+            st.session_state[open_key] = True
+            st.rerun()
+        return
+
+    options = []
+    option_map = {}
+
+    for row in rows:
+        team_name = (
+            st.session_state.team["team_name"]
+            if row["side"] == "our"
+            else game["opponent"]
+        )
+        label = (
+            f'{int(row["inning"])}回｜{team_name}｜'
+            f'{int(row.get("runs") or 0)}点'
+        )
+        options.append(label)
+        option_map[label] = row
+
+    selected_label = st.selectbox(
+        "変更する得点",
+        options,
+        key=f'history_score_select_{game["id"]}',
+    )
+    target = option_map[selected_label]
+
+    new_runs = st.number_input(
+        "得点",
+        min_value=0,
+        max_value=30,
+        value=int(target.get("runs") or 0),
+        step=1,
+        key=f'history_score_runs_{target["id"]}',
+    )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        if st.button(
+            "変更を保存",
+            type="primary",
+            use_container_width=True,
+            key=f'save_history_score_{target["id"]}',
+        ):
+            save_inning_score_and_recalculate(
+                game["id"],
+                target["inning"],
+                target["side"],
+                int(new_runs),
+            )
+            st.session_state[open_key] = False
+            flash(
+                f'{int(target["inning"])}回の得点を'
+                f'{int(new_runs)}点に変更しました'
+            )
+            st.rerun()
+
+    with c2:
+        if st.button(
+            "キャンセル",
+            use_container_width=True,
+            key=f'cancel_history_score_{game["id"]}',
+        ):
+            st.session_state[open_key] = False
+            st.rerun()
+
+
 def game_detail(game):
     st.markdown(
         f'<div class="score-box">'
@@ -4323,6 +4529,9 @@ def game_detail(game):
 
     section("イニングスコア")
     inning_score_table(game)
+
+    # 過去の試合から変更できるのは点数のみ
+    history_score_editor(game)
 
     # -------------------------
     # 打撃成績
