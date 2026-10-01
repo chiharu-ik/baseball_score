@@ -918,47 +918,17 @@ def load_persistent_recent_teams(limit=8):
 
 def restore_after_taskkill():
     """
-    session_state とURLの両方が空でもSupabaseから復元。
-    メインチーム「りこなん」が記憶済みならそこへ自動復帰する。
-    それ以外は最近使ったチームとして初期画面に復元する。
+    タスクキル等でsession_stateが消えた場合は、
+    Supabaseのremembered_teamsから最近使ったチーム一覧だけ復元する。
+    自動参加はせず、初期画面から1タップで参加する。
     """
     if st.session_state.get("team"):
         return
 
-    persistent = load_persistent_recent_teams()
+    persistent = load_persistent_recent_teams(limit=8)
 
     if persistent:
         st.session_state.recent_teams = persistent
-
-    # このアプリのメインチームは「りこなん」。
-    # 記憶済みのりこなんがあれば、タスクキル後は自動で戻す。
-    main_team = next(
-        (
-            t for t in persistent
-            if str(t.get("team_name") or "").strip() == "りこなん"
-        ),
-        None,
-    )
-
-    if main_team:
-        try:
-            teams = (
-                supabase.table("teams")
-                .select("*")
-                .eq("id", main_team["id"])
-                .limit(1)
-                .execute()
-                .data
-                or []
-            )
-        except Exception:
-            teams = []
-
-        if teams:
-            st.session_state.team = teams[0]
-            st.session_state.page = "ホーム"
-            st.session_state.game_id = None
-            sync_url_state(teams[0], None)
 
 
 # =========================================================
@@ -1861,6 +1831,12 @@ def format_innings(outs):
 # =========================================================
 
 def team_gate():
+    # タスクキル後はsession_stateではなくSupabaseから履歴を復元
+    if not st.session_state.get("recent_teams"):
+        persistent_recent = load_persistent_recent_teams(limit=8)
+        if persistent_recent:
+            st.session_state.recent_teams = persistent_recent
+
     st.markdown(
         '<div class="bs-logo">'
         '⚾ Baseball Score'
