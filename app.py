@@ -2718,6 +2718,7 @@ def editable_inning_score_table(game):
         '</tbody></table></div>'
     )
     st.markdown(table_html, unsafe_allow_html=True)
+    st.caption("スコア表は表示専用です。変更するときだけ下の「得点を修正する」を押してください。")
 
     # 得点表そのものを視覚表示し、その直下に「修正する回」をコンパクトに配置。
     # Streamlit標準ではHTMLセルのクリックイベントをPythonへ直接返せないため、
@@ -2729,7 +2730,7 @@ def editable_inning_score_table(game):
 
     if not st.session_state[edit_open_key]:
         if st.button(
-            "得点を修正",
+            "得点を修正する",
             use_container_width=True,
             key=f'open_inning_score_editor_{game["id"]}',
         ):
@@ -4412,7 +4413,11 @@ def inning_score_table(game):
 
 
 def history_score_editor(game):
-    """過去試合ではイニング得点だけ編集可能。打撃/投球ログは編集しない。"""
+    """
+    過去試合では点数だけ編集可能。
+    その回の inning_scores 行が存在しなくても、新規作成できる。
+    例: ゲームセット時に7回裏を保存できなかった過去試合も修正可能。
+    """
     rows = (
         supabase.table("inning_scores")
         .select("*")
@@ -4422,10 +4427,6 @@ def history_score_editor(game):
         .data
         or []
     )
-
-    if not rows:
-        st.caption("編集できるイニング得点がありません。")
-        return
 
     open_key = f'history_score_editor_open_{game["id"]}'
 
@@ -4439,24 +4440,53 @@ def history_score_editor(game):
             st.rerun()
         return
 
+    # 保存済みデータだけでなく、1回〜最終回の表裏をすべて候補にする。
+    recorded_max = max(
+        [int(r.get("inning") or 1) for r in rows],
+        default=1,
+    )
+    game_max = int(game.get("current_inning") or 1)
+    max_inning = max(7, recorded_max, game_max)
+
+    existing_map = {
+        (int(r["inning"]), r["side"]): r
+        for r in rows
+    }
+
     options = []
     option_map = {}
 
-    for row in rows:
-        team_name = (
-            st.session_state.team["team_name"]
-            if row["side"] == "our"
-            else game["opponent"]
-        )
-        label = (
-            f'{int(row["inning"])}回｜{team_name}｜'
-            f'{int(row.get("runs") or 0)}点'
-        )
-        options.append(label)
-        option_map[label] = row
+    # bat_first=Trueなら自チームが表、Falseなら自チームが裏
+    our_is_top = bool(game.get("bat_first"))
+
+    for inning in range(1, max_inning + 1):
+        for half in ("表", "裏"):
+            if half == "表":
+                side = "our" if our_is_top else "their"
+            else:
+                side = "their" if our_is_top else "our"
+
+            team_name = (
+                st.session_state.team["team_name"]
+                if side == "our"
+                else game["opponent"]
+            )
+
+            existing = existing_map.get((inning, side))
+            runs = int(existing.get("runs") or 0) if existing else 0
+            suffix = "" if existing else "（未入力）"
+
+            label = f"{inning}回{half}｜{team_name}｜{runs}点{suffix}"
+            options.append(label)
+            option_map[label] = {
+                "inning": inning,
+                "side": side,
+                "runs": runs,
+                "existing": existing,
+            }
 
     selected_label = st.selectbox(
-        "変更する得点",
+        "変更する回",
         options,
         key=f'history_score_select_{game["id"]}',
     )
@@ -4466,9 +4496,12 @@ def history_score_editor(game):
         "得点",
         min_value=0,
         max_value=30,
-        value=int(target.get("runs") or 0),
+        value=int(target["runs"]),
         step=1,
-        key=f'history_score_runs_{target["id"]}',
+        key=(
+            f'history_score_runs_{game["id"]}_'
+            f'{target["inning"]}_{target["side"]}'
+        ),
     )
 
     c1, c2 = st.columns(2)
@@ -4478,7 +4511,10 @@ def history_score_editor(game):
             "変更を保存",
             type="primary",
             use_container_width=True,
-            key=f'save_history_score_{target["id"]}',
+            key=(
+                f'save_history_score_{game["id"]}_'
+                f'{target["inning"]}_{target["side"]}'
+            ),
         ):
             save_inning_score_and_recalculate(
                 game["id"],
@@ -4488,8 +4524,8 @@ def history_score_editor(game):
             )
             st.session_state[open_key] = False
             flash(
-                f'{int(target["inning"])}回の得点を'
-                f'{int(new_runs)}点に変更しました'
+                f'{selected_label.split("｜")[0]}の得点を'
+                f'{int(new_runs)}点で保存しました'
             )
             st.rerun()
 
@@ -4501,6 +4537,7 @@ def history_score_editor(game):
         ):
             st.session_state[open_key] = False
             st.rerun()
+
 
 
 def game_detail(game):
