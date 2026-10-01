@@ -45,6 +45,8 @@ DEFAULTS = {
     "sub_open": False,
     "finish_open": False,
     "tiebreak_open": False,
+    "tiebreak_active": False,
+    "tiebreak_waiting_second_half": False,
     "edit_batting_id": None,
     "delete_batting_id": None,
     "edit_pitching_id": None,
@@ -3343,50 +3345,76 @@ def pitching_input(game):
 # =========================================================
 
 def tiebreak_panel(game):
-    # タイブレークでは、その回の先頭打者を手動で指定できる。
-    # DBの追加カラムは不要で、games.current_batter_index を更新する。
     lineup = get_lineup_players()
     if not lineup:
         return
 
-    if st.button(
-        "タイブレーク設定",
-        use_container_width=True,
-    ):
-        st.session_state.tiebreak_open = not st.session_state.tiebreak_open
+    if not st.session_state.tiebreak_active:
+        if st.button("タイブレーク", use_container_width=True, key=f'tb_start_{game["id"]}'):
+            st.session_state.tiebreak_active = True
+            st.session_state.tiebreak_open = True
+            st.session_state.tiebreak_waiting_second_half = False
+            st.rerun()
 
     if not st.session_state.tiebreak_open:
         return
 
-    st.info("タイブレークで、この回の先頭打者を選択してください。")
-    indices = list(range(len(lineup)))
-    current_index = (game.get("current_batter_index") or 0) % len(lineup)
-    selected_index = st.selectbox(
-        "この回の先頭打者",
-        indices,
-        index=current_index,
-        format_func=lambda i: f'{i + 1}番　{lineup[i]["name"]}',
-        key=f'tiebreak_batter_{game["id"]}_{game["current_inning"]}',
+    second = st.session_state.tiebreak_waiting_second_half
+    st.info(
+        "タイブレーク後攻｜先頭打者を選択してください。"
+        if second else
+        "タイブレーク先攻｜先頭打者を選択してください。"
     )
 
-    c1, c2 = st.columns(2)
+    our_offense = game["current_mode"] == "offense"
+
+    if our_offense:
+        indices = list(range(len(lineup)))
+        current = int(game.get("current_batter_index") or 0) % len(lineup)
+        selected = st.selectbox(
+            "先頭打者", indices, index=current,
+            format_func=lambda i: f'{i+1}番　{lineup[i]["name"]}',
+            key=f'tb_our_{game["id"]}_{game["current_inning"]}_{"2" if second else "1"}'
+        )
+        selected_name = f'{selected+1}番 {lineup[selected]["name"]}'
+    else:
+        orders = list(range(1,10))
+        current = int(game.get("opponent_batter_index") or 0) % 9
+        order = st.selectbox(
+            "相手の先頭打者", orders, index=current,
+            format_func=lambda n: f"{n}番打者",
+            key=f'tb_opp_{game["id"]}_{game["current_inning"]}_{"2" if second else "1"}'
+        )
+        selected = order - 1
+        selected_name = f"相手{order}番打者"
+
+    c1,c2=st.columns(2)
     with c1:
-        if st.button(
-            "この打者から開始",
-            type="primary",
-            use_container_width=True,
-        ):
-            update_game({"current_batter_index": int(selected_index)})
-            st.session_state.tiebreak_open = False
-            flash(f'{lineup[selected_index]["name"]} から開始します')
+        if st.button("この打者から開始", type="primary", use_container_width=True,
+                     key=f'tb_ok_{game["id"]}_{"2" if second else "1"}'):
+            if our_offense:
+                update_game({"current_batter_index": int(selected)})
+            else:
+                update_game({"opponent_batter_index": int(selected)})
+
+            if second:
+                st.session_state.tiebreak_active = False
+                st.session_state.tiebreak_waiting_second_half = False
+                st.session_state.tiebreak_open = False
+                flash(f"タイブレーク後攻：{selected_name}から開始")
+            else:
+                st.session_state.tiebreak_waiting_second_half = True
+                st.session_state.tiebreak_open = False
+                flash(f"タイブレーク先攻：{selected_name}から開始")
             st.rerun()
+
     with c2:
-        if st.button(
-            "キャンセル",
-            key="cancel_tiebreak",
-            use_container_width=True,
-        ):
-            st.session_state.tiebreak_open = False
+        if st.button("キャンセル", use_container_width=True,
+                     key=f'tb_cancel_{game["id"]}_{"2" if second else "1"}'):
+            st.session_state.tiebreak_open=False
+            if not second:
+                st.session_state.tiebreak_active=False
+                st.session_state.tiebreak_waiting_second_half=False
             st.rerun()
 
 
@@ -3526,13 +3554,18 @@ def side_switch_panel(game):
 
         update_game(values)
 
-        st.session_state.switch_open = (
-            False
-        )
+        st.session_state.switch_open = False
 
-        flash(
-            "攻守を交替しました"
-        )
+        # タイブレーク先攻終了後の攻守交替なら、
+        # 後攻の先頭打者選択を自動で開く
+        if (
+            st.session_state.get("tiebreak_active")
+            and st.session_state.get("tiebreak_waiting_second_half")
+        ):
+            st.session_state.tiebreak_open = True
+            flash("攻守交替しました。タイブレーク後攻の先頭打者を選択してください。")
+        else:
+            flash("攻守を交替しました")
 
         st.rerun()
 
@@ -3969,8 +4002,8 @@ def score_page():
     else:
         pitching_input(game)
 
-    if game["current_mode"] == "offense":
-        tiebreak_panel(game)
+    # 先攻・後攻どちらの攻撃側でもタイブレーク先頭打者を設定
+    tiebreak_panel(game)
 
     side_switch_panel(game)
     substitution_panel(game)
