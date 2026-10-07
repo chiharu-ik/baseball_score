@@ -137,20 +137,23 @@ function calcBatting(rows: BattingRow[]) {
 
       if (r.hit_type === "二塁打") doubles++;
       if (r.hit_type === "三塁打") triples++;
-
-      if (r.hit_type === "本塁打") {
-        HR++;
-      }
+      if (r.hit_type === "本塁打") HR++;
     }
   }
 
   const AVG = AB ? H / AB : null;
-
   const obpDen = AB + BB + HBP + SF;
-  const OBP = obpDen ? (H + BB + HBP) / obpDen : null;
+  const OBP = obpDen
+    ? (H + BB + HBP) / obpDen
+    : null;
 
   const singles = H - doubles - triples - HR;
-  const TB = singles + doubles * 2 + triples * 3 + HR * 4;
+  const TB =
+    singles +
+    doubles * 2 +
+    triples * 3 +
+    HR * 4;
+
   const SLG = AB ? TB / AB : null;
 
   const OPS =
@@ -181,14 +184,31 @@ function calcPitching(
   finalRows: PitchingGameStat[]
 ) {
   const H = rows.filter((r) =>
-    ["安打", "二塁打", "三塁打", "本塁打"].includes(r.result)
+    ["安打", "二塁打", "三塁打", "本塁打"].includes(
+      r.result
+    )
   ).length;
 
-  const SO = rows.filter((r) => r.result === "三振").length;
-  const BB = rows.filter((r) => r.result === "四球").length;
-  const HBP = rows.filter((r) => r.result === "死球").length;
-  const HR = rows.filter((r) => r.result === "本塁打").length;
-  const R = rows.reduce((a, r) => a + n(r.runs), 0);
+  const SO = rows.filter(
+    (r) => r.result === "三振"
+  ).length;
+
+  const BB = rows.filter(
+    (r) => r.result === "四球"
+  ).length;
+
+  const HBP = rows.filter(
+    (r) => r.result === "死球"
+  ).length;
+
+  const HR = rows.filter(
+    (r) => r.result === "本塁打"
+  ).length;
+
+  const R = rows.reduce(
+    (a, r) => a + n(r.runs),
+    0
+  );
 
   const outs = finalRows.reduce(
     (a, r) => a + n(r.innings_outs),
@@ -200,7 +220,9 @@ function calcPitching(
     0
   );
 
-  const ERA = outs ? (ER * 27) / outs : null;
+  const ERA = outs
+    ? (ER * 27) / outs
+    : null;
 
   return {
     H,
@@ -217,13 +239,18 @@ function calcPitching(
 
 function saveRecentTeam(team: Team) {
   try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const old = raw ? JSON.parse(raw) : [];
+    const raw =
+      localStorage.getItem(RECENT_KEY);
+
+    const old = raw
+      ? JSON.parse(raw)
+      : [];
 
     const next = [
       team,
       ...old.filter(
-        (x: Team) => x.team_code !== team.team_code
+        (x: Team) =>
+          x.team_code !== team.team_code
       ),
     ].slice(0, 8);
 
@@ -234,28 +261,94 @@ function saveRecentTeam(team: Team) {
   } catch {}
 }
 
+/* =========================================================
+   APP
+========================================================= */
+
 export default function Page() {
-  const [team, setTeam] = useState<Team | null>(null);
-  const [recentTeams, setRecentTeams] = useState<Team[]>([]);
-  const [page, setPage] = useState("home");
+  const [team, setTeam] =
+    useState<Team | null>(null);
+
+  const [recentTeams, setRecentTeams] =
+    useState<Team[]>([]);
+
+  const [page, setPage] =
+    useState("home");
+
+  const [hasLiveGame, setHasLiveGame] =
+    useState(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(RECENT_KEY);
-      if (raw) setRecentTeams(JSON.parse(raw));
+      const raw =
+        localStorage.getItem(RECENT_KEY);
+
+      if (raw) {
+        setRecentTeams(
+          JSON.parse(raw)
+        );
+      }
     } catch {}
   }, []);
+
+  async function checkLiveGame(
+    selectedTeam: Team
+  ) {
+    const { data } = await supabase
+      .from("games")
+      .select("id")
+      .eq("team_id", selectedTeam.id)
+      .eq("status", "playing")
+      .limit(1);
+
+    setHasLiveGame(
+      !!data && data.length > 0
+    );
+  }
+
+  useEffect(() => {
+    if (team) {
+      checkLiveGame(team);
+    }
+  }, [team, page]);
 
   function enterTeam(t: Team) {
     setTeam(t);
     saveRecentTeam(t);
 
     try {
-      const raw = localStorage.getItem(RECENT_KEY);
-      if (raw) setRecentTeams(JSON.parse(raw));
+      const raw =
+        localStorage.getItem(
+          RECENT_KEY
+        );
+
+      if (raw) {
+        setRecentTeams(
+          JSON.parse(raw)
+        );
+      }
     } catch {}
 
     setPage("home");
+  }
+
+  /*
+    全画面共通ホーム処理。
+
+    子画面独自の状態に依存せず、
+    必ずトップ画面へ戻す。
+  */
+  function goHome() {
+    setPage("home");
+
+    if (team) {
+      checkLiveGame(team);
+    }
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   if (!team) {
@@ -273,9 +366,11 @@ export default function Page() {
         <Home
           team={team}
           go={setPage}
+          hasLiveGame={hasLiveGame}
           changeTeam={() => {
             setTeam(null);
             setPage("home");
+            setHasLiveGame(false);
           }}
         />
       )}
@@ -283,43 +378,50 @@ export default function Page() {
       {page === "players" && (
         <Players
           team={team}
-          back={() => setPage("home")}
+          goHome={goHome}
         />
       )}
 
       {page === "newgame" && (
         <NewGame
           team={team}
-          back={() => setPage("home")}
-          openGame={() => setPage("score")}
+          goHome={goHome}
+          openGame={() => {
+            setHasLiveGame(true);
+            setPage("score");
+          }}
         />
       )}
 
       {page === "score" && (
         <LiveScore
           team={team}
-          back={() => setPage("home")}
+          goHome={goHome}
+          onGameFinished={() => {
+            setHasLiveGame(false);
+            setPage("home");
+          }}
         />
       )}
 
       {page === "stats" && (
         <Stats
           team={team}
-          back={() => setPage("home")}
+          goHome={goHome}
         />
       )}
 
       {page === "teamstats" && (
         <TeamStats
           team={team}
-          back={() => setPage("home")}
+          goHome={goHome}
         />
       )}
 
       {page === "history" && (
         <History
           team={team}
-          back={() => setPage("home")}
+          goHome={goHome}
         />
       )}
     </main>
@@ -327,7 +429,7 @@ export default function Page() {
 }
 
 /* =========================================================
-   TEAM
+   TEAM GATE
 ========================================================= */
 
 function TeamGate({
@@ -337,12 +439,21 @@ function TeamGate({
   recentTeams: Team[];
   enterTeam: (t: Team) => void;
 }) {
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [message, setMessage] = useState("");
+  const [code, setCode] =
+    useState("");
 
-  async function joinTeam(input?: string) {
-    const target = (input || code)
+  const [name, setName] =
+    useState("");
+
+  const [message, setMessage] =
+    useState("");
+
+  async function joinTeam(
+    input?: string
+  ) {
+    const target = (
+      input || code
+    )
       .trim()
       .toUpperCase();
 
@@ -350,19 +461,29 @@ function TeamGate({
 
     setMessage("");
 
-    const { data, error } = await supabase
-      .from("teams")
-      .select("id,team_name,team_code")
-      .eq("team_code", target)
-      .maybeSingle();
+    const { data, error } =
+      await supabase
+        .from("teams")
+        .select(
+          "id,team_name,team_code"
+        )
+        .eq(
+          "team_code",
+          target
+        )
+        .maybeSingle();
 
     if (error) {
-      setMessage("チーム情報を取得できませんでした。");
+      setMessage(
+        "チーム情報を取得できませんでした。"
+      );
       return;
     }
 
     if (!data) {
-      setMessage("チームが見つかりません。");
+      setMessage(
+        "チームが見つかりません。"
+      );
       return;
     }
 
@@ -371,35 +492,53 @@ function TeamGate({
 
   async function createTeam() {
     if (!name.trim()) {
-      setMessage("チーム名を入力してください。");
+      setMessage(
+        "チーム名を入力してください。"
+      );
       return;
     }
 
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const chars =
+      "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     let newCode = "";
 
     for (let i = 0; i < 6; i++) {
       newCode +=
-        chars[Math.floor(Math.random() * chars.length)];
+        chars[
+          Math.floor(
+            Math.random() *
+              chars.length
+          )
+        ];
     }
 
     const ownerCode =
       crypto.randomUUID?.() ||
-      Math.random().toString(36).slice(2);
+      Math.random()
+        .toString(36)
+        .slice(2);
 
-    const { data, error } = await supabase
-      .from("teams")
-      .insert({
-        team_name: name.trim(),
-        team_code: newCode,
-        owner_code: ownerCode,
-      })
-      .select("id,team_name,team_code")
-      .single();
+    const { data, error } =
+      await supabase
+        .from("teams")
+        .insert({
+          team_name:
+            name.trim(),
+          team_code:
+            newCode,
+          owner_code:
+            ownerCode,
+        })
+        .select(
+          "id,team_name,team_code"
+        )
+        .single();
 
     if (error || !data) {
-      setMessage("チームを作成できませんでした。");
+      setMessage(
+        "チームを作成できませんでした。"
+      );
       return;
     }
 
@@ -408,22 +547,40 @@ function TeamGate({
 
   return (
     <main className="wrap">
-      <div className="brand">Baseball Score</div>
+      <div className="brand">
+        Baseball Score
+      </div>
 
       {recentTeams.length > 0 && (
         <section className="card">
-          <h2>最近使ったチーム</h2>
+          <h2>
+            最近使ったチーム
+          </h2>
 
-          {recentTeams.map((t) => (
-            <button
-              key={t.team_code}
-              onClick={() => joinTeam(t.team_code)}
-            >
-              <strong>{t.team_name}</strong>
-              <br />
-              <small>{t.team_code}</small>
-            </button>
-          ))}
+          {recentTeams.map(
+            (t) => (
+              <button
+                key={
+                  t.team_code
+                }
+                onClick={() =>
+                  joinTeam(
+                    t.team_code
+                  )
+                }
+              >
+                <strong>
+                  {t.team_name}
+                </strong>
+
+                <br />
+
+                <small>
+                  {t.team_code}
+                </small>
+              </button>
+            )
+          )}
         </section>
       )}
 
@@ -434,13 +591,17 @@ function TeamGate({
           value={code}
           placeholder="チームコード"
           onChange={(e) =>
-            setCode(e.target.value.toUpperCase())
+            setCode(
+              e.target.value.toUpperCase()
+            )
           }
         />
 
         <button
           className="primary"
-          onClick={() => joinTeam()}
+          onClick={() =>
+            joinTeam()
+          }
         >
           チームに参加
         </button>
@@ -452,7 +613,11 @@ function TeamGate({
         <input
           value={name}
           placeholder="例：ベイスターズ"
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) =>
+            setName(
+              e.target.value
+            )
+          }
         />
 
         <button
@@ -464,7 +629,9 @@ function TeamGate({
       </section>
 
       {message && (
-        <div className="notice">{message}</div>
+        <div className="notice">
+          {message}
+        </div>
       )}
     </main>
   );
@@ -478,22 +645,32 @@ function Home({
   team,
   go,
   changeTeam,
+  hasLiveGame,
 }: {
   team: Team;
   go: (p: string) => void;
   changeTeam: () => void;
+  hasLiveGame: boolean;
 }) {
   return (
     <>
       <div className="top">
         <div>
-          <h1>{team.team_name}</h1>
+          <h1>
+            {team.team_name}
+          </h1>
+
           <span className="pill">
-            TEAM CODE {team.team_code}
+            TEAM CODE{" "}
+            {team.team_code}
           </span>
         </div>
 
-        <button onClick={changeTeam}>
+        <button
+          onClick={
+            changeTeam
+          }
+        >
           チームを変更
         </button>
       </div>
@@ -501,32 +678,75 @@ function Home({
       <div className="grid2">
         <button
           className="primary"
-          onClick={() => go("newgame")}
+          onClick={() =>
+            go("newgame")
+          }
         >
           新しい試合
         </button>
 
-        <button onClick={() => go("score")}>
-          スコア入力
-        </button>
+        {hasLiveGame && (
+          <button
+            onClick={() =>
+              go("score")
+            }
+          >
+            試合を続ける
+          </button>
+        )}
 
-        <button onClick={() => go("players")}>
+        <button
+          onClick={() =>
+            go("players")
+          }
+        >
           選手登録
         </button>
 
-        <button onClick={() => go("stats")}>
+        <button
+          onClick={() =>
+            go("stats")
+          }
+        >
           個人成績・ランキング
         </button>
 
-        <button onClick={() => go("teamstats")}>
+        <button
+          onClick={() =>
+            go("teamstats")
+          }
+        >
           チーム成績
         </button>
 
-        <button onClick={() => go("history")}>
+        <button
+          onClick={() =>
+            go("history")
+          }
+        >
           過去の試合
         </button>
       </div>
     </>
+  );
+}
+
+/* =========================================================
+   HOME BUTTON
+========================================================= */
+
+function HomeButton({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+    >
+      ← ホーム
+    </button>
   );
 }
 
@@ -536,25 +756,40 @@ function Home({
 
 function Players({
   team,
-  back,
+  goHome,
 }: {
   team: Team;
-  back: () => void;
+  goHome: () => void;
 }) {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [name, setName] = useState("");
-  const [number, setNumber] = useState("");
-  const [grade, setGrade] = useState("1年");
-  const [message, setMessage] = useState("");
+  const [players, setPlayers] =
+    useState<Player[]>([]);
+
+  const [name, setName] =
+    useState("");
+
+  const [number, setNumber] =
+    useState("");
+
+  const [grade, setGrade] =
+    useState("1年");
+
+  const [message, setMessage] =
+    useState("");
 
   async function load() {
-    const { data } = await supabase
-      .from("players")
-      .select("*")
-      .eq("team_id", team.id)
-      .order("number");
+    const { data } =
+      await supabase
+        .from("players")
+        .select("*")
+        .eq(
+          "team_id",
+          team.id
+        )
+        .order("number");
 
-    setPlayers((data || []) as Player[]);
+    setPlayers(
+      (data || []) as Player[]
+    );
   }
 
   useEffect(() => {
@@ -564,48 +799,73 @@ function Players({
   async function addPlayer() {
     if (!name.trim()) return;
 
-    const { error } = await supabase
-      .from("players")
-      .insert({
-        team_id: team.id,
-        name: name.trim(),
-        number: number || null,
-        grade,
-        active: true,
-      });
+    const { error } =
+      await supabase
+        .from("players")
+        .insert({
+          team_id:
+            team.id,
+          name:
+            name.trim(),
+          number:
+            number || null,
+          grade,
+          active: true,
+        });
 
     if (error) {
-      setMessage("登録できませんでした。");
+      setMessage(
+        "登録できませんでした。"
+      );
       return;
     }
 
     setName("");
     setNumber("");
-    setMessage("選手を登録しました。");
+
+    setMessage(
+      "選手を登録しました。"
+    );
+
     await load();
   }
 
   return (
     <>
-      <button onClick={back}>‹ ホーム</button>
+      <HomeButton
+        onClick={goHome}
+      />
+
       <h1>選手登録</h1>
 
       <section className="card">
         <input
           placeholder="選手名"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) =>
+            setName(
+              e.target.value
+            )
+          }
         />
 
         <input
           placeholder="背番号"
           value={number}
-          onChange={(e) => setNumber(e.target.value)}
+          onChange={(e) =>
+            setNumber(
+              e.target.value
+            )
+          }
         />
 
         <select
           value={grade}
-          onChange={(e) => setGrade(e.target.value)}
+          onChange={(e) =>
+            setGrade(
+              e.target.value
+            )
+          }
         >
           <option>1年</option>
           <option>2年</option>
@@ -616,13 +876,17 @@ function Players({
 
         <button
           className="primary"
-          onClick={addPlayer}
+          onClick={
+            addPlayer
+          }
         >
           登録
         </button>
 
         {message && (
-          <div className="success">{message}</div>
+          <div className="success">
+            {message}
+          </div>
         )}
       </section>
 
@@ -630,10 +894,21 @@ function Players({
         <h2>登録選手</h2>
 
         {players.map((p) => (
-          <div className="row" key={p.id}>
-            <strong>{p.name}</strong>
+          <div
+            className="row"
+            key={p.id}
+          >
+            <strong>
+              {p.name}
+            </strong>
+
             <span>
-              #{p.number || "-"} ｜ {p.grade || "未設定"}
+              #
+              {p.number ||
+                "-"}{" "}
+              ｜{" "}
+              {p.grade ||
+                "未設定"}
             </span>
           </div>
         ))}
@@ -648,179 +923,387 @@ function Players({
 
 function NewGame({
   team,
-  back,
+  goHome,
   openGame,
 }: {
   team: Team;
-  back: () => void;
+  goHome: () => void;
   openGame: () => void;
 }) {
-  const [opponent, setOpponent] = useState("");
-  const [gameDate, setGameDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [place, setPlace] = useState("");
-  const [gameType, setGameType] = useState("練習試合");
-  const [tournament, setTournament] = useState("");
-  const [batFirst, setBatFirst] = useState(true);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [lineup, setLineup] = useState<any[]>([]);
-  const [pitcher, setPitcher] = useState("");
+  const [opponent, setOpponent] =
+    useState("");
+
+  const [gameDate, setGameDate] =
+    useState(
+      new Date()
+        .toISOString()
+        .slice(0, 10)
+    );
+
+  const [place, setPlace] =
+    useState("");
+
+  const [gameType, setGameType] =
+    useState("練習試合");
+
+  const [
+    tournament,
+    setTournament,
+  ] = useState("");
+
+  const [batFirst, setBatFirst] =
+    useState(true);
+
+  const [players, setPlayers] =
+    useState<Player[]>([]);
+
+  const [lineup, setLineup] =
+    useState<any[]>([]);
+
+  const [pitcher, setPitcher] =
+    useState("");
 
   useEffect(() => {
     supabase
       .from("players")
       .select("*")
-      .eq("team_id", team.id)
+      .eq(
+        "team_id",
+        team.id
+      )
       .then(({ data }) => {
-        setPlayers((data || []) as Player[]);
+        setPlayers(
+          (data ||
+            []) as Player[]
+        );
       });
   }, [team.id]);
 
-  function setSlot(index: number, value: string) {
-    const next = [...lineup];
-    next[index] = value;
+  function setSlot(
+    index: number,
+    value: string
+  ) {
+    const next = [
+      ...lineup,
+    ];
+
+    next[index] =
+      value;
+
     setLineup(next);
   }
 
   async function createGame() {
-    if (!opponent.trim()) {
-      alert("対戦相手を入力してください。");
+    if (
+      !opponent.trim()
+    ) {
+      alert(
+        "対戦相手を入力してください。"
+      );
       return;
     }
 
-    const { data: game, error } = await supabase
+    const {
+      data: game,
+      error,
+    } = await supabase
       .from("games")
       .insert({
-        team_id: team.id,
-        game_date: gameDate,
-        opponent: opponent.trim(),
-        place: place || null,
-        game_type: gameType || null,
-        tournament: tournament || null,
-        bat_first: batFirst,
+        team_id:
+          team.id,
+
+        game_date:
+          gameDate,
+
+        opponent:
+          opponent.trim(),
+
+        place:
+          place || null,
+
+        game_type:
+          gameType ||
+          null,
+
+        tournament:
+          tournament ||
+          null,
+
+        bat_first:
+          batFirst,
+
         our_score: 0,
         their_score: 0,
-        status: "playing",
+
+        status:
+          "playing",
+
         current_inning: 1,
-        current_mode: batFirst ? "offense" : "defense",
-        current_batter_index: 0,
-        opponent_batter_index: 0,
-        current_pitcher_id: pitcher || null,
+
+        current_mode:
+          batFirst
+            ? "offense"
+            : "defense",
+
+        current_batter_index:
+          0,
+
+        opponent_batter_index:
+          0,
+
+        current_pitcher_id:
+          pitcher ||
+          null,
       })
       .select()
       .single();
 
-    if (error || !game) {
-      alert("試合を作成できませんでした。");
+    if (
+      error ||
+      !game
+    ) {
+      alert(
+        "試合を作成できませんでした。"
+      );
       return;
     }
 
-    const lineupRows = lineup
-      .map((playerId, i) => ({
-        game_id: game.id,
-        slot: i + 1,
-        player_id: playerId || null,
-      }))
-      .filter((x) => x.player_id);
+    const lineupRows =
+      lineup
+        .map(
+          (
+            playerId,
+            i
+          ) => ({
+            game_id:
+              game.id,
 
-    if (lineupRows.length) {
-      await supabase.from("lineup").insert(lineupRows);
+            slot:
+              i + 1,
+
+            player_id:
+              playerId ||
+              null,
+          })
+        )
+        .filter(
+          (x) =>
+            x.player_id
+        );
+
+    if (
+      lineupRows.length
+    ) {
+      await supabase
+        .from("lineup")
+        .insert(
+          lineupRows
+        );
     }
 
+    /*
+      新しい試合作成後は
+      「試合を続ける」と同じ
+      スコア画面へ移動
+    */
     openGame();
   }
 
   return (
     <>
-      <button onClick={back}>‹ ホーム</button>
-      <h1>新しい試合</h1>
+      <HomeButton
+        onClick={goHome}
+      />
+
+      <h1>
+        新しい試合
+      </h1>
 
       <section className="card">
-        <label>試合日</label>
+        <label>
+          試合日
+        </label>
+
         <input
           type="date"
-          value={gameDate}
-          onChange={(e) => setGameDate(e.target.value)}
+          value={
+            gameDate
+          }
+          onChange={(e) =>
+            setGameDate(
+              e.target.value
+            )
+          }
         />
 
-        <label>対戦相手</label>
+        <label>
+          対戦相手
+        </label>
+
         <input
-          value={opponent}
-          onChange={(e) => setOpponent(e.target.value)}
+          value={
+            opponent
+          }
+          onChange={(e) =>
+            setOpponent(
+              e.target.value
+            )
+          }
         />
 
         <label>場所</label>
+
         <input
           value={place}
-          onChange={(e) => setPlace(e.target.value)}
+          onChange={(e) =>
+            setPlace(
+              e.target.value
+            )
+          }
         />
 
-        <label>試合種別</label>
+        <label>
+          試合種別
+        </label>
+
         <input
-          value={gameType}
-          onChange={(e) => setGameType(e.target.value)}
+          value={
+            gameType
+          }
+          onChange={(e) =>
+            setGameType(
+              e.target.value
+            )
+          }
         />
 
         <label>大会</label>
+
         <input
-          value={tournament}
-          onChange={(e) => setTournament(e.target.value)}
+          value={
+            tournament
+          }
+          onChange={(e) =>
+            setTournament(
+              e.target.value
+            )
+          }
         />
 
-        <label>先攻・後攻</label>
+        <label>
+          先攻・後攻
+        </label>
+
         <select
-          value={batFirst ? "first" : "second"}
+          value={
+            batFirst
+              ? "first"
+              : "second"
+          }
           onChange={(e) =>
-            setBatFirst(e.target.value === "first")
+            setBatFirst(
+              e.target.value ===
+                "first"
+            )
           }
         >
-          <option value="first">先攻</option>
-          <option value="second">後攻</option>
+          <option value="first">
+            先攻
+          </option>
+
+          <option value="second">
+            後攻
+          </option>
         </select>
       </section>
 
       <section className="card">
         <h2>オーダー</h2>
 
-        {Array.from({ length: 9 }).map((_, i) => (
-          <label key={i}>
-            {i + 1}番
-            <select
-              value={lineup[i] || ""}
-              onChange={(e) =>
-                setSlot(i, e.target.value)
-              }
+        {Array.from({
+          length: 9,
+        }).map(
+          (_, i) => (
+            <label
+              key={i}
             >
-              <option value="">選択</option>
+              {i + 1}番
 
-              {players.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              <select
+                value={
+                  lineup[i] ||
+                  ""
+                }
+                onChange={(
+                  e
+                ) =>
+                  setSlot(
+                    i,
+                    e.target
+                      .value
+                  )
+                }
+              >
+                <option value="">
+                  選択
                 </option>
-              ))}
-            </select>
-          </label>
-        ))}
 
-        <label>先発投手</label>
+                {players.map(
+                  (p) => (
+                    <option
+                      key={
+                        p.id
+                      }
+                      value={
+                        p.id
+                      }
+                    >
+                      {
+                        p.name
+                      }
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+          )
+        )}
+
+        <label>
+          先発投手
+        </label>
 
         <select
-          value={pitcher}
-          onChange={(e) => setPitcher(e.target.value)}
+          value={
+            pitcher
+          }
+          onChange={(e) =>
+            setPitcher(
+              e.target.value
+            )
+          }
         >
-          <option value="">選択</option>
+          <option value="">
+            選択
+          </option>
 
-          {players.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          {players.map(
+            (p) => (
+              <option
+                key={p.id}
+                value={p.id}
+              >
+                {p.name}
+              </option>
+            )
+          )}
         </select>
 
         <button
           className="primary"
-          onClick={createGame}
+          onClick={
+            createGame
+          }
         >
           試合開始
         </button>
@@ -831,7 +1314,6 @@ function NewGame({
 
 /* =========================================================
    SCOREBOARD
-   先攻を上・後攻を下
 ========================================================= */
 
 function Scoreboard({
@@ -843,67 +1325,129 @@ function Scoreboard({
   team: Team;
   scores: InningScore[];
 }) {
-  const maxInning = Math.max(
-    7,
-    ...scores.map((x) => n(x.inning))
-  );
+  const maxInning =
+    Math.max(
+      7,
+      ...scores.map(
+        (x) =>
+          n(x.inning)
+      )
+    );
 
-  const innings = Array.from(
-    { length: maxInning },
-    (_, i) => i + 1
-  );
+  const innings =
+    Array.from(
+      {
+        length:
+          maxInning,
+      },
+      (_, i) =>
+        i + 1
+    );
 
   const get = (
     inning: number,
-    side: "our" | "their"
+    side:
+      | "our"
+      | "their"
   ) => {
-    const x = scores.find(
-      (s) =>
-        n(s.inning) === inning &&
-        s.side === side
-    );
+    const x =
+      scores.find(
+        (s) =>
+          n(
+            s.inning
+          ) === inning &&
+          s.side ===
+            side
+      );
 
-    return x ? n(x.runs) : "";
+    return x
+      ? n(x.runs)
+      : "";
   };
 
-  const ourTotal = scores
-    .filter((x) => x.side === "our")
-    .reduce((a, x) => a + n(x.runs), 0);
+  const ourTotal =
+    scores
+      .filter(
+        (x) =>
+          x.side ===
+          "our"
+      )
+      .reduce(
+        (a, x) =>
+          a +
+          n(x.runs),
+        0
+      );
 
-  const theirTotal = scores
-    .filter((x) => x.side === "their")
-    .reduce((a, x) => a + n(x.runs), 0);
+  const theirTotal =
+    scores
+      .filter(
+        (x) =>
+          x.side ===
+          "their"
+      )
+      .reduce(
+        (a, x) =>
+          a +
+          n(x.runs),
+        0
+      );
 
-  const topName = game.bat_first
-    ? team.team_name
-    : game.opponent;
+  /*
+    先攻を必ず上段。
+    後攻を必ず下段。
+  */
+  const topName =
+    game.bat_first
+      ? team.team_name
+      : game.opponent;
 
-  const bottomName = game.bat_first
-    ? game.opponent
-    : team.team_name;
+  const bottomName =
+    game.bat_first
+      ? game.opponent
+      : team.team_name;
 
-  const topSide: "our" | "their" =
-    game.bat_first ? "our" : "their";
+  const topSide:
+    | "our"
+    | "their" =
+    game.bat_first
+      ? "our"
+      : "their";
 
-  const bottomSide: "our" | "their" =
-    game.bat_first ? "their" : "our";
+  const bottomSide:
+    | "our"
+    | "their" =
+    game.bat_first
+      ? "their"
+      : "our";
 
   const topTotal =
-    topSide === "our" ? ourTotal : theirTotal;
+    topSide === "our"
+      ? ourTotal
+      : theirTotal;
 
   const bottomTotal =
-    bottomSide === "our" ? ourTotal : theirTotal;
+    bottomSide ===
+    "our"
+      ? ourTotal
+      : theirTotal;
 
   return (
     <div className="scroll">
       <table>
         <thead>
           <tr>
-            <th>TEAM</th>
+            <th>
+              TEAM
+            </th>
 
-            {innings.map((i) => (
-              <th key={i}>{i}</th>
-            ))}
+            {innings.map(
+              (i) => (
+                <th key={i}>
+                  {i}
+                </th>
+              )
+            )}
 
             <th>R</th>
           </tr>
@@ -911,28 +1455,50 @@ function Scoreboard({
 
         <tbody>
           <tr>
-            <th>{topName}</th>
+            <th>
+              {topName}
+            </th>
 
-            {innings.map((i) => (
-              <td key={i}>{get(i, topSide)}</td>
-            ))}
+            {innings.map(
+              (i) => (
+                <td key={i}>
+                  {get(
+                    i,
+                    topSide
+                  )}
+                </td>
+              )
+            )}
 
             <td>
-              <strong>{topTotal}</strong>
+              <strong>
+                {topTotal}
+              </strong>
             </td>
           </tr>
 
           <tr>
-            <th>{bottomName}</th>
+            <th>
+              {bottomName}
+            </th>
 
-            {innings.map((i) => (
-              <td key={i}>
-                {get(i, bottomSide)}
-              </td>
-            ))}
+            {innings.map(
+              (i) => (
+                <td key={i}>
+                  {get(
+                    i,
+                    bottomSide
+                  )}
+                </td>
+              )
+            )}
 
             <td>
-              <strong>{bottomTotal}</strong>
+              <strong>
+                {
+                  bottomTotal
+                }
+              </strong>
             </td>
           </tr>
         </tbody>
@@ -947,27 +1513,60 @@ function Scoreboard({
 
 function LiveScore({
   team,
-  back,
+  goHome,
+  onGameFinished,
 }: {
   team: Team;
-  back: () => void;
+  goHome: () => void;
+  onGameFinished: () => void;
 }) {
-  const [game, setGame] = useState<Game | null>(null);
-  const [scores, setScores] = useState<InningScore[]>([]);
-  const [inningRuns, setInningRuns] = useState(0);
-  const [finishOpen, setFinishOpen] = useState(false);
-  const [finalRuns, setFinalRuns] = useState(0);
+  const [game, setGame] =
+    useState<Game | null>(
+      null
+    );
+
+  const [scores, setScores] =
+    useState<
+      InningScore[]
+    >([]);
+
+  const [
+    inningRuns,
+    setInningRuns,
+  ] = useState(0);
+
+  const [
+    finishOpen,
+    setFinishOpen,
+  ] = useState(false);
+
+  const [
+    finalRuns,
+    setFinalRuns,
+  ] = useState(0);
 
   async function load() {
-    const { data } = await supabase
-      .from("games")
-      .select("*")
-      .eq("team_id", team.id)
-      .eq("status", "playing")
-      .order("id", { ascending: false })
-      .limit(1);
+    const { data } =
+      await supabase
+        .from("games")
+        .select("*")
+        .eq(
+          "team_id",
+          team.id
+        )
+        .eq(
+          "status",
+          "playing"
+        )
+        .order("id", {
+          ascending: false,
+        })
+        .limit(1);
 
-    const g = data?.[0] as Game | undefined;
+    const g =
+      data?.[0] as
+        | Game
+        | undefined;
 
     if (!g) {
       setGame(null);
@@ -976,12 +1575,21 @@ function LiveScore({
 
     setGame(g);
 
-    const { data: s } = await supabase
-      .from("inning_scores")
-      .select("*")
-      .eq("game_id", g.id);
+    const { data: s } =
+      await supabase
+        .from(
+          "inning_scores"
+        )
+        .select("*")
+        .eq(
+          "game_id",
+          g.id
+        );
 
-    setScores((s || []) as InningScore[]);
+    setScores(
+      (s ||
+        []) as InningScore[]
+    );
   }
 
   useEffect(() => {
@@ -990,93 +1598,156 @@ function LiveScore({
 
   async function saveScore(
     inning: number,
-    side: "our" | "their",
+    side:
+      | "our"
+      | "their",
     runs: number
   ) {
     if (!game) return;
 
-    const { data: existing } = await supabase
-      .from("inning_scores")
+    const {
+      data: existing,
+    } = await supabase
+      .from(
+        "inning_scores"
+      )
       .select("*")
-      .eq("game_id", game.id)
-      .eq("inning", inning)
-      .eq("side", side)
+      .eq(
+        "game_id",
+        game.id
+      )
+      .eq(
+        "inning",
+        inning
+      )
+      .eq(
+        "side",
+        side
+      )
       .limit(1);
 
-    if (existing?.length) {
+    if (
+      existing?.length
+    ) {
       await supabase
-        .from("inning_scores")
-        .update({ runs })
-        .eq("id", existing[0].id);
+        .from(
+          "inning_scores"
+        )
+        .update({
+          runs,
+        })
+        .eq(
+          "id",
+          existing[0].id
+        );
     } else {
-      await supabase.from("inning_scores").insert({
-        game_id: game.id,
-        inning,
-        side,
-        runs,
-      });
+      await supabase
+        .from(
+          "inning_scores"
+        )
+        .insert({
+          game_id:
+            game.id,
+          inning,
+          side,
+          runs,
+        });
     }
 
-    const { data: refreshed } = await supabase
-      .from("inning_scores")
+    const {
+      data: refreshed,
+    } = await supabase
+      .from(
+        "inning_scores"
+      )
       .select("*")
-      .eq("game_id", game.id);
+      .eq(
+        "game_id",
+        game.id
+      );
 
-    const all = (refreshed || []) as InningScore[];
+    const all =
+      (refreshed ||
+        []) as InningScore[];
 
-    const our = all
-      .filter((x) => x.side === "our")
-      .reduce((a, x) => a + n(x.runs), 0);
+    const our =
+      all
+        .filter(
+          (x) =>
+            x.side ===
+            "our"
+        )
+        .reduce(
+          (a, x) =>
+            a +
+            n(x.runs),
+          0
+        );
 
-    const their = all
-      .filter((x) => x.side === "their")
-      .reduce((a, x) => a + n(x.runs), 0);
+    const their =
+      all
+        .filter(
+          (x) =>
+            x.side ===
+            "their"
+        )
+        .reduce(
+          (a, x) =>
+            a +
+            n(x.runs),
+          0
+        );
 
     await supabase
       .from("games")
       .update({
         our_score: our,
-        their_score: their,
+        their_score:
+          their,
       })
-      .eq("id", game.id);
+      .eq(
+        "id",
+        game.id
+      );
   }
 
   async function changeSides() {
     if (!game) return;
 
-    const side: "our" | "their" =
-      game.current_mode === "offense"
+    const side:
+      | "our"
+      | "their" =
+      game.current_mode ===
+      "offense"
         ? "our"
         : "their";
 
     await saveScore(
-      n(game.current_inning),
+      n(
+        game.current_inning
+      ),
       side,
       inningRuns
     );
 
     const nextMode =
-      game.current_mode === "offense"
+      game.current_mode ===
+      "offense"
         ? "defense"
         : "offense";
 
-    let nextInning = n(game.current_inning);
+    let nextInning =
+      n(
+        game.current_inning
+      );
 
-    /*
-      裏が終了したら次の回へ。
-      自チームが先攻の場合：
-        offense = 表
-        defense = 裏
-
-      自チームが後攻の場合：
-        defense = 表
-        offense = 裏
-    */
     const wasBottom =
       (game.bat_first &&
-        game.current_mode === "defense") ||
+        game.current_mode ===
+          "defense") ||
       (!game.bat_first &&
-        game.current_mode === "offense");
+        game.current_mode ===
+          "offense");
 
     if (wasBottom) {
       nextInning++;
@@ -1085,20 +1756,33 @@ function LiveScore({
     await supabase
       .from("games")
       .update({
-        current_mode: nextMode,
-        current_inning: nextInning,
+        current_mode:
+          nextMode,
+
+        current_inning:
+          nextInning,
       })
-      .eq("id", game.id);
+      .eq(
+        "id",
+        game.id
+      );
 
     setInningRuns(0);
+
     await load();
   }
 
   if (!game) {
     return (
       <>
-        <button onClick={back}>‹ ホーム</button>
-        <h1>スコア入力</h1>
+        <HomeButton
+          onClick={goHome}
+        />
+
+        <h1>
+          試合を続ける
+        </h1>
+
         <div className="notice">
           進行中の試合はありません。
         </div>
@@ -1106,32 +1790,41 @@ function LiveScore({
     );
   }
 
-  const currentSide: "our" | "their" =
-    game.current_mode === "offense"
+  const currentSide:
+    | "our"
+    | "their" =
+    game.current_mode ===
+    "offense"
       ? "our"
       : "their";
 
-  /*
-    ★重要
-    最後の回が既に保存されているか確認。
-    保存済みならゲームセット時に再入力させない。
-  */
-  const currentHalfAlreadySaved = scores.some(
-    (s) =>
-      n(s.inning) === n(game.current_inning) &&
-      s.side === currentSide
-  );
+  const currentHalfAlreadySaved =
+    scores.some(
+      (s) =>
+        n(
+          s.inning
+        ) ===
+          n(
+            game.current_inning
+          ) &&
+        s.side ===
+          currentSide
+    );
 
   async function finishGame() {
     if (!game) return;
 
     /*
-      未確定の場合だけ最後の回を保存。
-      既に攻守交替で確定済みなら再保存しない。
+      最後の半イニングが
+      未確定の場合だけ保存。
     */
-    if (!currentHalfAlreadySaved) {
+    if (
+      !currentHalfAlreadySaved
+    ) {
       await saveScore(
-        n(game.current_inning),
+        n(
+          game.current_inning
+        ),
         currentSide,
         finalRuns
       );
@@ -1140,32 +1833,56 @@ function LiveScore({
     await supabase
       .from("games")
       .update({
-        status: "finished",
+        status:
+          "finished",
       })
-      .eq("id", game.id);
+      .eq(
+        "id",
+        game.id
+      );
 
     setFinishOpen(false);
-    await load();
-    alert("試合を終了しました。");
+
+    alert(
+      "試合を終了しました。"
+    );
+
+    /*
+      終了後はホームへ。
+      「試合を続ける」も消える。
+    */
+    onGameFinished();
   }
+
+  const halfText =
+    game.bat_first
+      ? game.current_mode ===
+        "offense"
+        ? "表"
+        : "裏"
+      : game.current_mode ===
+        "defense"
+      ? "表"
+      : "裏";
 
   return (
     <>
-      <button onClick={back}>‹ ホーム</button>
+      <HomeButton
+        onClick={goHome}
+      />
 
-      <h1>スコア入力</h1>
+      <h1>
+        試合を続ける
+      </h1>
 
       <div className="score">
-        {game.current_inning}回
-        {game.bat_first
-          ? game.current_mode === "offense"
-            ? "表"
-            : "裏"
-          : game.current_mode === "defense"
-          ? "表"
-          : "裏"}
+        {
+          game.current_inning
+        }
+        回{halfText}
         ｜{" "}
-        {game.current_mode === "offense"
+        {game.current_mode ===
+        "offense"
           ? "攻撃中"
           : "守備中"}
       </div>
@@ -1178,21 +1895,33 @@ function LiveScore({
 
       <section className="card">
         <h2>
-          {game.current_inning}回の得点
+          {
+            game.current_inning
+          }
+          回{halfText}の得点
         </h2>
 
         <input
           type="number"
           min={0}
-          value={inningRuns}
+          value={
+            inningRuns
+          }
           onChange={(e) =>
-            setInningRuns(n(e.target.value))
+            setInningRuns(
+              n(
+                e.target
+                  .value
+              )
+            )
           }
         />
 
         <button
           className="primary"
-          onClick={changeSides}
+          onClick={
+            changeSides
+          }
         >
           攻守交替
         </button>
@@ -1202,7 +1931,9 @@ function LiveScore({
         className="danger"
         onClick={() => {
           setFinalRuns(0);
-          setFinishOpen(true);
+          setFinishOpen(
+            true
+          );
         }}
       >
         ゲームセット
@@ -1210,31 +1941,41 @@ function LiveScore({
 
       {finishOpen && (
         <section className="card">
-          <h2>ゲームセット</h2>
+          <h2>
+            ゲームセット
+          </h2>
 
           {!currentHalfAlreadySaved ? (
             <>
               <p>
-                現在の
-                {game.current_inning}回
-                {game.bat_first
-                  ? game.current_mode === "offense"
-                    ? "表"
-                    : "裏"
-                  : game.current_mode === "defense"
-                  ? "表"
-                  : "裏"}
+                {
+                  game.current_inning
+                }
+                回
+                {halfText}
                 の得点がまだ確定していません。
               </p>
 
-              <label>最後の回の得点</label>
+              <label>
+                最後の回の得点
+              </label>
 
               <input
                 type="number"
                 min={0}
-                value={finalRuns}
-                onChange={(e) =>
-                  setFinalRuns(n(e.target.value))
+                value={
+                  finalRuns
+                }
+                onChange={(
+                  e
+                ) =>
+                  setFinalRuns(
+                    n(
+                      e
+                        .target
+                        .value
+                    )
+                  )
                 }
               />
             </>
@@ -1246,13 +1987,19 @@ function LiveScore({
 
           <button
             className="danger"
-            onClick={finishGame}
+            onClick={
+              finishGame
+            }
           >
             試合を終了
           </button>
 
           <button
-            onClick={() => setFinishOpen(false)}
+            onClick={() =>
+              setFinishOpen(
+                false
+              )
+            }
           >
             キャンセル
           </button>
@@ -1268,42 +2015,77 @@ function LiveScore({
 
 function Stats({
   team,
-  back,
+  goHome,
 }: {
   team: Team;
-  back: () => void;
+  goHome: () => void;
 }) {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [batting, setBatting] = useState<BattingRow[]>([]);
-  const [mode, setMode] = useState("individual");
+  const [players, setPlayers] =
+    useState<Player[]>([]);
+
+  const [batting, setBatting] =
+    useState<
+      BattingRow[]
+    >([]);
+
+  const [mode, setMode] =
+    useState("individual");
 
   useEffect(() => {
     async function load() {
-      const { data: p } = await supabase
-        .from("players")
-        .select("*")
-        .eq("team_id", team.id);
+      const { data: p } =
+        await supabase
+          .from(
+            "players"
+          )
+          .select("*")
+          .eq(
+            "team_id",
+            team.id
+          );
 
-      const { data: games } = await supabase
+      const {
+        data: games,
+      } = await supabase
         .from("games")
         .select("id")
-        .eq("team_id", team.id);
+        .eq(
+          "team_id",
+          team.id
+        );
 
-      const ids = (games || []).map((g) => g.id);
+      const ids =
+        (games || []).map(
+          (g) => g.id
+        );
 
       let b: any[] = [];
 
       if (ids.length) {
-        const res = await supabase
-          .from("batting")
-          .select("*")
-          .in("game_id", ids);
+        const res =
+          await supabase
+            .from(
+              "batting"
+            )
+            .select("*")
+            .in(
+              "game_id",
+              ids
+            );
 
-        b = res.data || [];
+        b =
+          res.data ||
+          [];
       }
 
-      setPlayers((p || []) as Player[]);
-      setBatting(b as BattingRow[]);
+      setPlayers(
+        (p ||
+          []) as Player[]
+      );
+
+      setBatting(
+        b as BattingRow[]
+      );
     }
 
     load();
@@ -1311,30 +2093,50 @@ function Stats({
 
   return (
     <>
-      <button onClick={back}>‹ ホーム</button>
-      <h1>成績確認</h1>
+      <HomeButton
+        onClick={goHome}
+      />
+
+      <h1>
+        成績確認
+      </h1>
 
       <div className="tabs">
         <button
           className={
-            mode === "individual" ? "primary" : ""
+            mode ===
+            "individual"
+              ? "primary"
+              : ""
           }
-          onClick={() => setMode("individual")}
+          onClick={() =>
+            setMode(
+              "individual"
+            )
+          }
         >
           個人成績
         </button>
 
         <button
           className={
-            mode === "ranking" ? "primary" : ""
+            mode ===
+            "ranking"
+              ? "primary"
+              : ""
           }
-          onClick={() => setMode("ranking")}
+          onClick={() =>
+            setMode(
+              "ranking"
+            )
+          }
         >
           ランキング
         </button>
       </div>
 
-      {mode === "individual" && (
+      {mode ===
+        "individual" && (
         <div className="scroll">
           <table>
             <thead>
@@ -1349,47 +2151,124 @@ function Stats({
                 <th>四球</th>
                 <th>死球</th>
                 <th>打率</th>
-                <th>出塁率</th>
+                <th>
+                  出塁率
+                </th>
                 <th>OPS</th>
               </tr>
             </thead>
 
             <tbody>
-              {players.map((p) => {
-                const s = calcBatting(
-                  batting.filter(
-                    (x) =>
-                      String(x.player_id) ===
-                      String(p.id)
-                  )
-                );
+              {players.map(
+                (p) => {
+                  const s =
+                    calcBatting(
+                      batting.filter(
+                        (
+                          x
+                        ) =>
+                          String(
+                            x.player_id
+                          ) ===
+                          String(
+                            p.id
+                          )
+                      )
+                    );
 
-                return (
-                  <tr key={p.id}>
-                    <th>{p.name}</th>
-                    <td>{s.PA}</td>
-                    <td>{s.AB}</td>
-                    <td>{s.H}</td>
-                    <td>{s.HR}</td>
-                    <td>{s.RBI}</td>
-                    <td>{s.SO}</td>
-                    <td>{s.BB}</td>
-                    <td>{s.HBP}</td>
-                    <td>{fmt3(s.AVG)}</td>
-                    <td>{fmt3(s.OBP)}</td>
-                    <td>{fmt3(s.OPS)}</td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr
+                      key={
+                        p.id
+                      }
+                    >
+                      <th>
+                        {
+                          p.name
+                        }
+                      </th>
+
+                      <td>
+                        {
+                          s.PA
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.AB
+                        }
+                      </td>
+
+                      <td>
+                        {s.H}
+                      </td>
+
+                      <td>
+                        {
+                          s.HR
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.RBI
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.SO
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.BB
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.HBP
+                        }
+                      </td>
+
+                      <td>
+                        {fmt3(
+                          s.AVG
+                        )}
+                      </td>
+
+                      <td>
+                        {fmt3(
+                          s.OBP
+                        )}
+                      </td>
+
+                      <td>
+                        {fmt3(
+                          s.OPS
+                        )}
+                      </td>
+                    </tr>
+                  );
+                }
+              )}
             </tbody>
           </table>
         </div>
       )}
 
-      {mode === "ranking" && (
+      {mode ===
+        "ranking" && (
         <Rankings
-          players={players}
-          batting={batting}
+          players={
+            players
+          }
+          batting={
+            batting
+          }
         />
       )}
     </>
@@ -1407,7 +2286,10 @@ function Rankings({
   players: Player[];
   batting: BattingRow[];
 }) {
-  const [category, setCategory] = useState("打率");
+  const [
+    category,
+    setCategory,
+  ] = useState("打率");
 
   const options = [
     "打率",
@@ -1421,77 +2303,175 @@ function Rankings({
     "死球",
   ];
 
-  const ranking = useMemo(() => {
-    return players
-      .map((p) => {
-        const s = calcBatting(
-          batting.filter(
-            (x) =>
-              String(x.player_id) === String(p.id)
+  const ranking =
+    useMemo(() => {
+      return players
+        .map((p) => {
+          const s =
+            calcBatting(
+              batting.filter(
+                (x) =>
+                  String(
+                    x.player_id
+                  ) ===
+                  String(
+                    p.id
+                  )
+              )
+            );
+
+          let value:
+            | number
+            | null = 0;
+
+          if (
+            category ===
+            "打率"
           )
+            value =
+              s.AVG;
+
+          if (
+            category ===
+            "出塁率"
+          )
+            value =
+              s.OBP;
+
+          if (
+            category ===
+            "OPS"
+          )
+            value =
+              s.OPS;
+
+          if (
+            category ===
+            "安打"
+          )
+            value =
+              s.H;
+
+          if (
+            category ===
+            "本塁打"
+          )
+            value =
+              s.HR;
+
+          if (
+            category ===
+            "打点"
+          )
+            value =
+              s.RBI;
+
+          if (
+            category ===
+            "三振"
+          )
+            value =
+              s.SO;
+
+          if (
+            category ===
+            "四球"
+          )
+            value =
+              s.BB;
+
+          if (
+            category ===
+            "死球"
+          )
+            value =
+              s.HBP;
+
+          return {
+            player: p,
+            value,
+          };
+        })
+        .filter(
+          (x) =>
+            x.value !==
+            null
+        )
+        .sort(
+          (a, b) =>
+            n(b.value) -
+            n(a.value)
         );
+    }, [
+      players,
+      batting,
+      category,
+    ]);
 
-        let value: number | null = 0;
-
-        if (category === "打率") value = s.AVG;
-        if (category === "出塁率") value = s.OBP;
-        if (category === "OPS") value = s.OPS;
-        if (category === "安打") value = s.H;
-        if (category === "本塁打") value = s.HR;
-        if (category === "打点") value = s.RBI;
-        if (category === "三振") value = s.SO;
-        if (category === "四球") value = s.BB;
-        if (category === "死球") value = s.HBP;
-
-        return {
-          player: p,
-          value,
-        };
-      })
-      .filter((x) => x.value !== null)
-      .sort(
-        (a, b) =>
-          n(b.value) - n(a.value)
-      );
-  }, [players, batting, category]);
-
-  const isRate = [
-    "打率",
-    "出塁率",
-    "OPS",
-  ].includes(category);
+  const isRate =
+    [
+      "打率",
+      "出塁率",
+      "OPS",
+    ].includes(
+      category
+    );
 
   return (
     <section className="card">
-      <label>ランキング項目</label>
+      <label>
+        ランキング項目
+      </label>
 
       <select
-        value={category}
+        value={
+          category
+        }
         onChange={(e) =>
-          setCategory(e.target.value)
+          setCategory(
+            e.target.value
+          )
         }
       >
-        {options.map((x) => (
-          <option key={x}>{x}</option>
-        ))}
+        {options.map(
+          (x) => (
+            <option
+              key={x}
+            >
+              {x}
+            </option>
+          )
+        )}
       </select>
 
-      {ranking.map((r, i) => (
-        <div
-          className="row"
-          key={r.player.id}
-        >
-          <strong>
-            {i + 1}位　{r.player.name}
-          </strong>
+      {ranking.map(
+        (r, i) => (
+          <div
+            className="row"
+            key={
+              r.player.id
+            }
+          >
+            <strong>
+              {i + 1}位　
+              {
+                r.player
+                  .name
+              }
+            </strong>
 
-          <span>
-            {isRate
-              ? fmt3(r.value)
-              : n(r.value)}
-          </span>
-        </div>
-      ))}
+            <span>
+              {isRate
+                ? fmt3(
+                    r.value
+                  )
+                : n(
+                    r.value
+                  )}
+            </span>
+          </div>
+        )
+      )}
     </section>
   );
 }
@@ -1502,67 +2482,122 @@ function Rankings({
 
 function TeamStats({
   team,
-  back,
+  goHome,
 }: {
   team: Team;
-  back: () => void;
+  goHome: () => void;
 }) {
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames] =
+    useState<Game[]>([]);
 
   useEffect(() => {
     supabase
       .from("games")
       .select("*")
-      .eq("team_id", team.id)
-      .eq("status", "finished")
-      .then(({ data }) =>
-        setGames((data || []) as Game[])
+      .eq(
+        "team_id",
+        team.id
+      )
+      .eq(
+        "status",
+        "finished"
+      )
+      .then(
+        ({ data }) =>
+          setGames(
+            (data ||
+              []) as Game[]
+          )
       );
   }, [team.id]);
 
-  const wins = games.filter(
-    (g) => n(g.our_score) > n(g.their_score)
-  ).length;
+  const wins =
+    games.filter(
+      (g) =>
+        n(
+          g.our_score
+        ) >
+        n(
+          g.their_score
+        )
+    ).length;
 
-  const losses = games.filter(
-    (g) => n(g.our_score) < n(g.their_score)
-  ).length;
+  const losses =
+    games.filter(
+      (g) =>
+        n(
+          g.our_score
+        ) <
+        n(
+          g.their_score
+        )
+    ).length;
 
-  const draws = games.length - wins - losses;
+  const draws =
+    games.length -
+    wins -
+    losses;
 
   return (
     <>
-      <button onClick={back}>‹ ホーム</button>
-      <h1>チーム成績</h1>
+      <HomeButton
+        onClick={goHome}
+      />
+
+      <h1>
+        チーム成績
+      </h1>
 
       <section className="card">
         <div className="metric">
           <span>戦績</span>
+
           <strong>
-            {wins}勝 {losses}敗 {draws}分
+            {wins}勝{" "}
+            {losses}敗{" "}
+            {draws}分
           </strong>
         </div>
 
         <div className="metric">
-          <span>試合数</span>
-          <strong>{games.length}</strong>
+          <span>
+            試合数
+          </span>
+
+          <strong>
+            {games.length}
+          </strong>
         </div>
 
         <div className="metric">
-          <span>総得点</span>
+          <span>
+            総得点
+          </span>
+
           <strong>
             {games.reduce(
-              (a, g) => a + n(g.our_score),
+              (a, g) =>
+                a +
+                n(
+                  g.our_score
+                ),
               0
             )}
           </strong>
         </div>
 
         <div className="metric">
-          <span>総失点</span>
+          <span>
+            総失点
+          </span>
+
           <strong>
             {games.reduce(
-              (a, g) => a + n(g.their_score),
+              (a, g) =>
+                a +
+                n(
+                  g.their_score
+                ),
               0
             )}
           </strong>
@@ -1573,63 +2608,114 @@ function TeamStats({
 }
 
 /* =========================================================
-   HISTORY / 過去の試合
+   HISTORY
 ========================================================= */
 
 function History({
   team,
-  back,
+  goHome,
 }: {
   team: Team;
-  back: () => void;
+  goHome: () => void;
 }) {
-  const [games, setGames] = useState<Game[]>([]);
-  const [selected, setSelected] = useState<Game | null>(
-    null
-  );
+  const [games, setGames] =
+    useState<Game[]>([]);
 
-  async function load() {
-    const { data } = await supabase
-      .from("games")
-      .select("*")
-      .eq("team_id", team.id)
-      .eq("status", "finished")
-      .order("game_date", { ascending: false });
+  const [
+    selected,
+    setSelected,
+  ] =
+    useState<Game | null>(
+      null
+    );
 
-    setGames((data || []) as Game[]);
+  async function loadGames() {
+    const { data } =
+      await supabase
+        .from("games")
+        .select("*")
+        .eq(
+          "team_id",
+          team.id
+        )
+        .eq(
+          "status",
+          "finished"
+        )
+        .order(
+          "game_date",
+          {
+            ascending:
+              false,
+          }
+        );
 
-    if (selected) {
-      const fresh = (data || []).find(
-        (g) => String(g.id) === String(selected.id)
-      );
-
-      if (fresh) setSelected(fresh as Game);
-    }
+    setGames(
+      (data ||
+        []) as Game[]
+    );
   }
 
   useEffect(() => {
-    load();
+    loadGames();
   }, [team.id]);
+
+  /*
+    詳細画面から一覧へ戻る専用。
+    ここでは再びselectedをセットしない。
+  */
+  function backToHistory() {
+    setSelected(null);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+
+    loadGames();
+  }
+
+  /*
+    ホームへ戻る場合も
+    詳細選択をリセットしてから
+    親のgoHomeを呼ぶ。
+  */
+  function historyGoHome() {
+    setSelected(null);
+    goHome();
+  }
 
   if (selected) {
     return (
       <GameDetail
         team={team}
         game={selected}
-        back={() => {
-          setSelected(null);
-          load();
-        }}
-        refresh={async () => {
-          const { data } = await supabase
-            .from("games")
-            .select("*")
-            .eq("id", selected.id)
-            .single();
+        backToHistory={
+          backToHistory
+        }
+        goHome={
+          historyGoHome
+        }
+        refreshGame={async () => {
+          const { data } =
+            await supabase
+              .from(
+                "games"
+              )
+              .select("*")
+              .eq(
+                "id",
+                selected.id
+              )
+              .single();
 
-          if (data) setSelected(data as Game);
+          if (data) {
+            setSelected(
+              data as Game
+            );
+          }
 
-          await load();
+          await loadGames();
         }}
       />
     );
@@ -1637,8 +2723,15 @@ function History({
 
   return (
     <>
-      <button onClick={back}>‹ ホーム</button>
-      <h1>過去の試合</h1>
+      <HomeButton
+        onClick={
+          historyGoHome
+        }
+      />
+
+      <h1>
+        過去の試合
+      </h1>
 
       {!games.length && (
         <div className="notice">
@@ -1646,72 +2739,142 @@ function History({
         </div>
       )}
 
-      {games.map((g) => {
-        const result =
-          n(g.our_score) > n(g.their_score)
-            ? "○"
-            : n(g.our_score) < n(g.their_score)
-            ? "●"
-            : "△";
+      {games.map(
+        (g) => {
+          const result =
+            n(
+              g.our_score
+            ) >
+            n(
+              g.their_score
+            )
+              ? "○"
+              : n(
+                    g.our_score
+                  ) <
+                  n(
+                    g.their_score
+                  )
+              ? "●"
+              : "△";
 
-        return (
-          <button
-            className="card"
-            key={g.id}
-            onClick={() => setSelected(g)}
-          >
-            <div className="row">
-              <strong>
-                {result}　vs {g.opponent}
-              </strong>
+          return (
+            <button
+              className="card"
+              key={g.id}
+              onClick={() => {
+                setSelected(
+                  g
+                );
 
-              <strong>
-                {g.our_score} - {g.their_score}
-              </strong>
-            </div>
+                window.scrollTo({
+                  top: 0,
+                });
+              }}
+            >
+              <div className="row">
+                <strong>
+                  {result}　vs{" "}
+                  {
+                    g.opponent
+                  }
+                </strong>
 
-            <small>
-              {g.game_date || ""}
-              {g.place ? ` ｜ ${g.place}` : ""}
-              {g.game_type
-                ? ` ｜ ${g.game_type}`
-                : ""}
-            </small>
-          </button>
-        );
-      })}
+                <strong>
+                  {
+                    g.our_score
+                  }{" "}
+                  -{" "}
+                  {
+                    g.their_score
+                  }
+                </strong>
+              </div>
+
+              <small>
+                {g.game_date ||
+                  ""}
+
+                {g.place
+                  ? ` ｜ ${g.place}`
+                  : ""}
+
+                {g.game_type
+                  ? ` ｜ ${g.game_type}`
+                  : ""}
+              </small>
+            </button>
+          );
+        }
+      )}
     </>
   );
 }
 
 /* =========================================================
-   PAST GAME DETAIL
+   GAME DETAIL
 ========================================================= */
 
 function GameDetail({
   team,
   game,
-  back,
-  refresh,
+  backToHistory,
+  goHome,
+  refreshGame,
 }: {
   team: Team;
   game: Game;
-  back: () => void;
-  refresh: () => Promise<void>;
+  backToHistory: () => void;
+  goHome: () => void;
+  refreshGame: () => Promise<void>;
 }) {
-  const [scores, setScores] = useState<InningScore[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [batting, setBatting] = useState<BattingRow[]>([]);
-  const [pitching, setPitching] = useState<PitchingRow[]>([]);
-  const [finalPitching, setFinalPitching] = useState<
+  const [scores, setScores] =
+    useState<
+      InningScore[]
+    >([]);
+
+  const [players, setPlayers] =
+    useState<Player[]>([]);
+
+  const [batting, setBatting] =
+    useState<
+      BattingRow[]
+    >([]);
+
+  const [pitching, setPitching] =
+    useState<
+      PitchingRow[]
+    >([]);
+
+  const [
+    finalPitching,
+    setFinalPitching,
+  ] = useState<
     PitchingGameStat[]
   >([]);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [editInning, setEditInning] = useState(1);
-  const [editSide, setEditSide] =
-    useState<"our" | "their">("our");
-  const [editRuns, setEditRuns] = useState(0);
+  const [
+    editOpen,
+    setEditOpen,
+  ] = useState(false);
+
+  const [
+    editInning,
+    setEditInning,
+  ] = useState(1);
+
+  const [
+    editSide,
+    setEditSide,
+  ] =
+    useState<
+      "our" | "their"
+    >("our");
+
+  const [
+    editRuns,
+    setEditRuns,
+  ] = useState(0);
 
   async function load() {
     const [
@@ -1720,51 +2883,82 @@ function GameDetail({
       battingRes,
       pitchingRes,
       finalRes,
-    ] = await Promise.all([
-      supabase
-        .from("inning_scores")
-        .select("*")
-        .eq("game_id", game.id),
+    ] =
+      await Promise.all([
+        supabase
+          .from(
+            "inning_scores"
+          )
+          .select("*")
+          .eq(
+            "game_id",
+            game.id
+          ),
 
-      supabase
-        .from("players")
-        .select("*")
-        .eq("team_id", team.id),
+        supabase
+          .from(
+            "players"
+          )
+          .select("*")
+          .eq(
+            "team_id",
+            team.id
+          ),
 
-      supabase
-        .from("batting")
-        .select("*")
-        .eq("game_id", game.id),
+        supabase
+          .from(
+            "batting"
+          )
+          .select("*")
+          .eq(
+            "game_id",
+            game.id
+          ),
 
-      supabase
-        .from("pitching")
-        .select("*")
-        .eq("game_id", game.id),
+        supabase
+          .from(
+            "pitching"
+          )
+          .select("*")
+          .eq(
+            "game_id",
+            game.id
+          ),
 
-      supabase
-        .from("pitching_game_stats")
-        .select("*")
-        .eq("game_id", game.id),
-    ]);
+        supabase
+          .from(
+            "pitching_game_stats"
+          )
+          .select("*")
+          .eq(
+            "game_id",
+            game.id
+          ),
+      ]);
 
     setScores(
-      (scoresRes.data || []) as InningScore[]
+      (scoresRes.data ||
+        []) as InningScore[]
     );
 
     setPlayers(
-      (playersRes.data || []) as Player[]
+      (playersRes.data ||
+        []) as Player[]
     );
 
     setBatting(
-      (battingRes.data || []) as BattingRow[]
+      (battingRes.data ||
+        []) as BattingRow[]
     );
 
     setPitching(
-      (pitchingRes.data || []) as PitchingRow[]
+      (pitchingRes.data ||
+        []) as PitchingRow[]
     );
 
     setFinalPitching(
-      (finalRes.data || []) as PitchingGameStat[]
+      (finalRes.data ||
+        []) as PitchingGameStat[]
     );
   }
 
@@ -1772,132 +2966,244 @@ function GameDetail({
     load();
   }, [game.id]);
 
-  const maxInning = Math.max(
-    7,
-    n(game.current_inning),
-    ...scores.map((s) => n(s.inning))
-  );
+  const maxInning =
+    Math.max(
+      7,
+      n(
+        game.current_inning
+      ),
+      ...scores.map(
+        (s) =>
+          n(s.inning)
+      )
+    );
+
+  function changeEditTarget(
+    inning: number,
+    side:
+      | "our"
+      | "their"
+  ) {
+    setEditInning(
+      inning
+    );
+
+    setEditSide(side);
+
+    const found =
+      scores.find(
+        (s) =>
+          n(
+            s.inning
+          ) === inning &&
+          s.side ===
+            side
+      );
+
+    setEditRuns(
+      found
+        ? n(found.runs)
+        : 0
+    );
+  }
 
   function openEditor() {
     setEditOpen(true);
 
-    const found = scores.find(
-      (s) =>
-        n(s.inning) === 1 &&
-        s.side === "our"
+    changeEditTarget(
+      1,
+      "our"
     );
-
-    setEditInning(1);
-    setEditSide("our");
-    setEditRuns(found ? n(found.runs) : 0);
-  }
-
-  function changeEditTarget(
-    inning: number,
-    side: "our" | "their"
-  ) {
-    setEditInning(inning);
-    setEditSide(side);
-
-    const found = scores.find(
-      (s) =>
-        n(s.inning) === inning &&
-        s.side === side
-    );
-
-    setEditRuns(found ? n(found.runs) : 0);
   }
 
   async function saveEditedScore() {
-    const existing = scores.find(
-      (s) =>
-        n(s.inning) === editInning &&
-        s.side === editSide
-    );
+    const existing =
+      scores.find(
+        (s) =>
+          n(
+            s.inning
+          ) ===
+            editInning &&
+          s.side ===
+            editSide
+      );
 
-    if (existing?.id) {
+    if (
+      existing?.id
+    ) {
       await supabase
-        .from("inning_scores")
+        .from(
+          "inning_scores"
+        )
         .update({
-          runs: editRuns,
+          runs:
+            editRuns,
         })
-        .eq("id", existing.id);
+        .eq(
+          "id",
+          existing.id
+        );
     } else {
-      /*
-        保存されていなかった回も追加できる。
-        例：7回裏を入力せずゲームセットした場合。
-      */
       await supabase
-        .from("inning_scores")
+        .from(
+          "inning_scores"
+        )
         .insert({
-          game_id: game.id,
-          inning: editInning,
-          side: editSide,
-          runs: editRuns,
+          game_id:
+            game.id,
+
+          inning:
+            editInning,
+
+          side:
+            editSide,
+
+          runs:
+            editRuns,
         });
     }
 
-    const { data } = await supabase
-      .from("inning_scores")
-      .select("*")
-      .eq("game_id", game.id);
+    const { data } =
+      await supabase
+        .from(
+          "inning_scores"
+        )
+        .select("*")
+        .eq(
+          "game_id",
+          game.id
+        );
 
-    const all = (data || []) as InningScore[];
+    const all =
+      (data ||
+        []) as InningScore[];
 
-    const ourTotal = all
-      .filter((x) => x.side === "our")
-      .reduce((a, x) => a + n(x.runs), 0);
+    const ourTotal =
+      all
+        .filter(
+          (x) =>
+            x.side ===
+            "our"
+        )
+        .reduce(
+          (a, x) =>
+            a +
+            n(x.runs),
+          0
+        );
 
-    const theirTotal = all
-      .filter((x) => x.side === "their")
-      .reduce((a, x) => a + n(x.runs), 0);
+    const theirTotal =
+      all
+        .filter(
+          (x) =>
+            x.side ===
+            "their"
+        )
+        .reduce(
+          (a, x) =>
+            a +
+            n(x.runs),
+          0
+        );
 
     await supabase
       .from("games")
       .update({
-        our_score: ourTotal,
-        their_score: theirTotal,
+        our_score:
+          ourTotal,
+
+        their_score:
+          theirTotal,
       })
-      .eq("id", game.id);
+      .eq(
+        "id",
+        game.id
+      );
 
     setEditOpen(false);
 
     await load();
-    await refresh();
+
+    await refreshGame();
   }
 
-  const battingPlayers = players
-    .map((p) => ({
-      player: p,
-      rows: batting.filter(
-        (r) =>
-          String(r.player_id) === String(p.id)
-      ),
-    }))
-    .filter((x) => x.rows.length);
+  const battingPlayers =
+    players
+      .map((p) => ({
+        player: p,
 
-  const pitcherIds = Array.from(
-    new Set([
-      ...pitching.map((x) =>
-        String(x.pitcher_id)
-      ),
-      ...finalPitching.map((x) =>
-        String(x.pitcher_id)
-      ),
-    ])
-  );
+        rows:
+          batting.filter(
+            (r) =>
+              String(
+                r.player_id
+              ) ===
+              String(
+                p.id
+              )
+          ),
+      }))
+      .filter(
+        (x) =>
+          x.rows.length
+      );
+
+  const pitcherIds =
+    Array.from(
+      new Set([
+        ...pitching.map(
+          (x) =>
+            String(
+              x.pitcher_id
+            )
+        ),
+
+        ...finalPitching.map(
+          (x) =>
+            String(
+              x.pitcher_id
+            )
+        ),
+      ])
+    );
 
   return (
     <>
-      <button onClick={back}>
-        ‹ 過去の試合
-      </button>
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          onClick={
+            backToHistory
+          }
+        >
+          ← 過去の試合
+        </button>
 
-      <h1>vs {game.opponent}</h1>
+        <button
+          type="button"
+          onClick={goHome}
+        >
+          ホーム
+        </button>
+      </div>
+
+      <h1>
+        vs {game.opponent}
+      </h1>
 
       <p>
-        {game.game_date || ""}
-        {game.place ? ` ｜ ${game.place}` : ""}
+        {game.game_date ||
+          ""}
+
+        {game.place
+          ? ` ｜ ${game.place}`
+          : ""}
       </p>
 
       <Scoreboard
@@ -1908,55 +3214,82 @@ function GameDetail({
 
       <button
         className="primary"
-        onClick={openEditor}
+        onClick={
+          openEditor
+        }
       >
         点数を変更
       </button>
 
       {editOpen && (
         <section className="card">
-          <h2>点数を変更</h2>
+          <h2>
+            点数を変更
+          </h2>
 
           <label>回</label>
 
           <select
-            value={editInning}
+            value={
+              editInning
+            }
             onChange={(e) =>
               changeEditTarget(
-                n(e.target.value),
+                n(
+                  e.target
+                    .value
+                ),
                 editSide
               )
             }
           >
             {Array.from(
-              { length: maxInning },
-              (_, i) => i + 1
-            ).map((i) => (
-              <option key={i} value={i}>
-                {i}回
-              </option>
-            ))}
+              {
+                length:
+                  maxInning,
+              },
+              (_, i) =>
+                i + 1
+            ).map(
+              (i) => (
+                <option
+                  key={i}
+                  value={i}
+                >
+                  {i}回
+                </option>
+              )
+            )}
           </select>
 
-          <label>チーム</label>
+          <label>
+            チーム
+          </label>
 
           <select
-            value={editSide}
+            value={
+              editSide
+            }
             onChange={(e) =>
               changeEditTarget(
                 editInning,
-                e.target.value as
+                e.target
+                  .value as
                   | "our"
                   | "their"
               )
             }
           >
             <option value="our">
-              {team.team_name}
+              {
+                team.team_name
+              }
             </option>
 
             <option value="their">
-              {game.opponent}
+              {
+                game.opponent
+              }
             </option>
           </select>
 
@@ -1965,28 +3298,43 @@ function GameDetail({
           <input
             type="number"
             min={0}
-            value={editRuns}
+            value={
+              editRuns
+            }
             onChange={(e) =>
-              setEditRuns(n(e.target.value))
+              setEditRuns(
+                n(
+                  e.target
+                    .value
+                )
+              )
             }
           />
 
           <button
             className="primary"
-            onClick={saveEditedScore}
+            onClick={
+              saveEditedScore
+            }
           >
             変更を保存
           </button>
 
           <button
-            onClick={() => setEditOpen(false)}
+            onClick={() =>
+              setEditOpen(
+                false
+              )
+            }
           >
             キャンセル
           </button>
         </section>
       )}
 
-      <h2>打撃個人成績</h2>
+      <h2>
+        打撃個人成績
+      </h2>
 
       {!battingPlayers.length ? (
         <div className="notice">
@@ -2001,40 +3349,123 @@ function GameDetail({
                 <th>打席</th>
                 <th>打数</th>
                 <th>安打</th>
-                <th>二塁打</th>
-                <th>三塁打</th>
+                <th>
+                  二塁打
+                </th>
+                <th>
+                  三塁打
+                </th>
                 <th>HR</th>
                 <th>打点</th>
                 <th>四球</th>
                 <th>死球</th>
                 <th>三振</th>
                 <th>打率</th>
-                <th>出塁率</th>
+                <th>
+                  出塁率
+                </th>
                 <th>OPS</th>
               </tr>
             </thead>
 
             <tbody>
               {battingPlayers.map(
-                ({ player, rows }) => {
-                  const s = calcBatting(rows);
+                ({
+                  player,
+                  rows,
+                }) => {
+                  const s =
+                    calcBatting(
+                      rows
+                    );
 
                   return (
-                    <tr key={player.id}>
-                      <th>{player.name}</th>
-                      <td>{s.PA}</td>
-                      <td>{s.AB}</td>
-                      <td>{s.H}</td>
-                      <td>{s.doubles}</td>
-                      <td>{s.triples}</td>
-                      <td>{s.HR}</td>
-                      <td>{s.RBI}</td>
-                      <td>{s.BB}</td>
-                      <td>{s.HBP}</td>
-                      <td>{s.SO}</td>
-                      <td>{fmt3(s.AVG)}</td>
-                      <td>{fmt3(s.OBP)}</td>
-                      <td>{fmt3(s.OPS)}</td>
+                    <tr
+                      key={
+                        player.id
+                      }
+                    >
+                      <th>
+                        {
+                          player.name
+                        }
+                      </th>
+
+                      <td>
+                        {
+                          s.PA
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.AB
+                        }
+                      </td>
+
+                      <td>
+                        {s.H}
+                      </td>
+
+                      <td>
+                        {
+                          s.doubles
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.triples
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.HR
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.RBI
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.BB
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.HBP
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.SO
+                        }
+                      </td>
+
+                      <td>
+                        {fmt3(
+                          s.AVG
+                        )}
+                      </td>
+
+                      <td>
+                        {fmt3(
+                          s.OBP
+                        )}
+                      </td>
+
+                      <td>
+                        {fmt3(
+                          s.OPS
+                        )}
+                      </td>
                     </tr>
                   );
                 }
@@ -2044,7 +3475,9 @@ function GameDetail({
         </div>
       )}
 
-      <h2>投手個人成績</h2>
+      <h2>
+        投手個人成績
+      </h2>
 
       {!pitcherIds.length ? (
         <div className="notice">
@@ -2056,62 +3489,135 @@ function GameDetail({
             <thead>
               <tr>
                 <th>投手</th>
-                <th>投球回</th>
-                <th>被安打</th>
-                <th>奪三振</th>
-                <th>与四球</th>
-                <th>与死球</th>
-                <th>被本塁打</th>
+                <th>
+                  投球回
+                </th>
+                <th>
+                  被安打
+                </th>
+                <th>
+                  奪三振
+                </th>
+                <th>
+                  与四球
+                </th>
+                <th>
+                  与死球
+                </th>
+                <th>
+                  被本塁打
+                </th>
                 <th>失点</th>
-                <th>自責点</th>
-                <th>防御率</th>
+                <th>
+                  自責点
+                </th>
+                <th>
+                  防御率
+                </th>
               </tr>
             </thead>
 
             <tbody>
-              {pitcherIds.map((pid) => {
-                const player = players.find(
-                  (p) => String(p.id) === pid
-                );
+              {pitcherIds.map(
+                (pid) => {
+                  const player =
+                    players.find(
+                      (p) =>
+                        String(
+                          p.id
+                        ) ===
+                        pid
+                    );
 
-                const rows = pitching.filter(
-                  (r) =>
-                    String(r.pitcher_id) === pid
-                );
+                  const rows =
+                    pitching.filter(
+                      (r) =>
+                        String(
+                          r.pitcher_id
+                        ) ===
+                        pid
+                    );
 
-                const finals = finalPitching.filter(
-                  (r) =>
-                    String(r.pitcher_id) === pid
-                );
+                  const finals =
+                    finalPitching.filter(
+                      (r) =>
+                        String(
+                          r.pitcher_id
+                        ) ===
+                        pid
+                    );
 
-                const s = calcPitching(
-                  rows,
-                  finals
-                );
+                  const s =
+                    calcPitching(
+                      rows,
+                      finals
+                    );
 
-                return (
-                  <tr key={pid}>
-                    <th>
-                      {player?.name || "投手"}
-                    </th>
-                    <td>
-                      {formatIP(s.outs)}
-                    </td>
-                    <td>{s.H}</td>
-                    <td>{s.SO}</td>
-                    <td>{s.BB}</td>
-                    <td>{s.HBP}</td>
-                    <td>{s.HR}</td>
-                    <td>{s.R}</td>
-                    <td>{s.ER}</td>
-                    <td>
-                      {s.ERA === null
-                        ? "---"
-                        : s.ERA.toFixed(2)}
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr
+                      key={pid}
+                    >
+                      <th>
+                        {player?.name ||
+                          "投手"}
+                      </th>
+
+                      <td>
+                        {formatIP(
+                          s.outs
+                        )}
+                      </td>
+
+                      <td>
+                        {s.H}
+                      </td>
+
+                      <td>
+                        {
+                          s.SO
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.BB
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.HBP
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          s.HR
+                        }
+                      </td>
+
+                      <td>
+                        {s.R}
+                      </td>
+
+                      <td>
+                        {
+                          s.ER
+                        }
+                      </td>
+
+                      <td>
+                        {s.ERA ===
+                        null
+                          ? "---"
+                          : s.ERA.toFixed(
+                              2
+                            )}
+                      </td>
+                    </tr>
+                  );
+                }
+              )}
             </tbody>
           </table>
         </div>
