@@ -1,128 +1,96 @@
-                        ) ===
-                        pid
-                    );
+"use client";
 
-                  const rows =
-                    pitching.filter(
-                      (r) =>
-                        String(
-                          r.pitcher_id
-                        ) ===
-                        pid
-                    );
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
 
-                  const finals =
-                    finalPitching.filter(
-                      (r) =>
-                        String(
-                          r.pitcher_id
-                        ) ===
-                        pid
-                    );
+type Team = {
+  id: string;
+  team_name: string;
+  team_code: string;
+};
 
-                  const s =
-                    calcPitching(
-                      rows,
-                      finals
-                    );
+type Player = {
+  id: any;
+  team_id: string;
+  name: string;
+  number?: string | number | null;
+  grade?: string | null;
+  active?: boolean;
+};
 
-                  return (
-                    <tr
-                      key={pid}
-                    >
-                      <th>
-                        {player?.name ||
-                          "投手"}
-                      </th>
+type Game = {
+  id: any;
+  team_id: string;
+  game_date?: string;
+  opponent: string;
+  place?: string | null;
+  game_type?: string | null;
+  tournament?: string | null;
+  bat_first: boolean;
+  our_score: number;
+  their_score: number;
+  status: string;
+  current_inning?: number;
+  current_mode?: string;
+  current_batter_index?: number;
+  current_pitcher_id?: any;
+  opponent_batter_index?: number;
+};
 
-                      <td>
-                        {finals.length ? formatIP(s.outs) : "---"}
-                      </td>
+type InningScore = {
+  id?: any;
+  game_id: any;
+  inning: number;
+  side: "our" | "their";
+  runs: number;
+};
 
-                      <td>
-                        {s.H}
-                      </td>
+type BattingRow = {
+  id: any;
+  game_id: any;
+  player_id: any;
+  inning: number;
+  result: string;
+  field?: string | null;
+  hit_type?: string | null;
+  batting_order?: number | null;
+  rbi?: number | null;
+};
 
-                      <td>
-                        {
-                          s.SO
-                        }
-                      </td>
+type PitchingRow = {
+  id: any;
+  game_id: any;
+  pitcher_id: any;
+  inning: number;
+  result: string;
+  runs?: number | null;
+  batting_order?: number | null;
+};
 
-                      <td>
-                        {
-                          s.BB
-                        }
-                      </td>
+type PitchingGameStat = {
+  id?: any;
+  game_id: any;
+  pitcher_id: any;
+  innings_outs: number;
+  earned_runs: number;
+};
 
-                      <td>
-                        {
-                          s.HBP
-                        }
-                      </td>
+const RECENT_KEY = "baseball_recent_teams_v1";
 
-                      <td>
-                        {
-                          s.HR
-                        }
-                      </td>
-
-                      <td>
-                        {s.R}
-                      </td>
-
-                      <td>
-                        {finals.length ? s.ER : "---"}
-                      </td>
-
-                      <td>
-                        {s.ERA ===
-                        null
-                          ? "---"
-                          : s.ERA.toFixed(
-                              2
-                            )}
-                      </td>
-                    </tr>
-                  );
-                }
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </>
-  );
+function n(v: any) {
+  return Number(v || 0);
 }
 
-/* 投手の通算成績・ランキング（過去の未登録投球回は推測しない） */
-function pitcherSummary(players: Player[], pitching: PitchingRow[], finals: PitchingGameStat[]) {
-  const ids = Array.from(new Set([...pitching.map(r => String(r.pitcher_id)), ...finals.map(r => String(r.pitcher_id))]));
-  return ids.map(id => {
-    const rows = pitching.filter(r => String(r.pitcher_id) === id);
-    const saved = finals.filter(r => String(r.pitcher_id) === id);
-    const s = calcPitching(rows, saved);
-    const appearances = new Set([...rows.map(r => String(r.game_id)), ...saved.map(r => String(r.game_id))]).size;
-    const recordedGames = new Set(saved.map(r => String(r.game_id)));
-    const missing = [...new Set(rows.map(r => String(r.game_id)))].some(gid => !recordedGames.has(gid));
-    const complete = saved.length > 0 && !missing;
-    return { id, name: players.find(p => String(p.id) === id)?.name || "投手", s, appearances, complete };
-  });
+function fmt3(v: number | null) {
+  if (v === null || Number.isNaN(v)) return "---";
+  return v.toFixed(3).replace(/^0/, "");
 }
 
-function PitcherStatsTable({ players, pitching, finals }: { players: Player[]; pitching: PitchingRow[]; finals: PitchingGameStat[] }) {
-  const items = pitcherSummary(players, pitching, finals);
-  if (!items.length) return <div className="notice">投手記録はありません。</div>;
-  return <div className="scroll"><table><thead><tr>{["投手", "登板", "投球回", "被安打", "奪三振", "与四球", "与死球", "被本塁打", "失点", "自責点", "防御率"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
-    {items.map(x => <tr key={x.id}><th>{x.name}</th><td>{x.appearances}</td><td>{x.complete ? formatIP(x.s.outs) : "---"}</td><td>{x.s.H}</td><td>{x.s.SO}</td><td>{x.s.BB}</td><td>{x.s.HBP}</td><td>{x.s.HR}</td><td>{x.s.R}</td><td>{x.complete ? x.s.ER : "---"}</td><td>{x.complete && x.s.ERA !== null ? x.s.ERA.toFixed(2) : "---"}</td></tr>)}
-  </tbody></table></div>;
+function formatIP(outs: number) {
+  const full = Math.floor(outs / 3);
+  const rem = outs % 3;
+  return rem === 0 ? `${full}` : `${full}.${rem}`;
 }
 
-function PitcherRankings({ players, pitching, finals }: { players: Player[]; pitching: PitchingRow[]; finals: PitchingGameStat[] }) {
-  const [metric, setMetric] = useState("奪三振");
-  const options = ["登板", "投球回", "防御率", "奪三振", "被安打", "与四球", "与死球", "被本塁打", "失点", "自責点"];
-  const items = pitcherSummary(players, pitching, finals).map(x => {
-    const values: Record<string, number | null> = { "登板": x.appearances, "投球回": x.complete ? x.s.outs : null, "防御率": x.complete ? x.s.ERA : null, "奪三振": x.s.SO, "被安打": x.s.H, "与四球": x.s.BB, "与死球": x.s.HBP, "被本塁打": x.s.HR, "失点": x.s.R, "自責点": x.complete ? x.s.ER : null };
-    return { ...x, value: values[metric] };
-  }).filter(x => x.value !== null).sort((a,b) => metric === "防御率" ? n(a.value) - n(b.value) : n(b.value) - n(a.value));
-  return <section className="card"><label>投手ランキング項目</label><select value={metric} onChange={e => setMetric(e.target.value)}>{options.map(o => <option key={o}>{o}</option>)}</select>
+function calcBatting(rows: BattingRow[]) {
+  let PA = 0;
