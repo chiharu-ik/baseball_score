@@ -19,6 +19,7 @@ type Player = {
 };
 
 type Game = {
+  tiebreak_active?: boolean | null;
   id: any;
   team_id: string;
   game_date?: string;
